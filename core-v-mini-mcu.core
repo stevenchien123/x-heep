@@ -44,6 +44,15 @@ filesets:
     - hw/core-v-mini-mcu/cpu_subsystem.sv
     - hw/core-v-mini-mcu/cve2_xif_wrapper.sv
     - hw/core-v-mini-mcu/cv32e40px_xif_wrapper.sv
+    - hw/ip_examples/simple_xif_coproc/simple_xif_coproc.sv
+    # Ascon Coprocessor
+    - hw/ip_examples/ascon_coproc/rtl/def.svh: {is_include_file: true}
+    - hw/ip_examples/ascon_coproc/rtl/rst_sync_bridge.sv: {is_include_file: true}
+    - hw/ip_examples/ascon_coproc/rtl/permutation.sv: {is_include_file: true}
+    - hw/ip_examples/ascon_coproc/rtl/Ascon.sv
+    - hw/ip_examples/ascon_coproc/rtl/ascon_stream_adapter.sv
+    - hw/ip_examples/ascon_coproc/rtl/ascon_coproc.sv
+    # Ascon Coprocessor
     - hw/core-v-mini-mcu/memory_subsystem.sv
     - hw/core-v-mini-mcu/xbar_varlat_one_to_n.sv
     - hw/core-v-mini-mcu/xbar_varlat_n_to_one.sv

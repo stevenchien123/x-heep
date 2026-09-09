@@ -1,0 +1,81 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Wed Sep  9 16:14:54 2026
+[*]
+[dumpfile] "/home/p76131474/workspace/x-heep/build/openhwgroup.org_systems_core-v-mini-mcu_1.0.5/sim-verilator/waveform.fst"
+[dumpfile_mtime] "Wed Sep  9 14:20:48 2026"
+[dumpfile_size] 15965275
+[savefile] "/home/p76131474/workspace/x-heep/signals/ascon_coproc_AEAD128_enc.gtkw"
+[timestart] 37445500
+[size] 1920 985
+[pos] -27 -24
+*-15.600000 37635000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.testharness.
+[treeopen] TOP.testharness.ext_if.
+[treeopen] TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.
+[treeopen] TOP.testharness.x_heep_system_i.core_v_mini_mcu_i.
+[treeopen] TOP.testharness.x_heep_system_i.core_v_mini_mcu_i.cpu_subsystem_i.
+[sst_width] 411
+[signals_width] 328
+[sst_expanded] 1
+[sst_vpaned_height] 291
+@28
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.clk
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.rst
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.rst_complete_o
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.rst_sync
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.start
+@100000028
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.cur_state[4:0]
+@28
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.mode[1:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.ED
+@22
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.counter[3:0]
+@800200
+-inputs
+@28
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.key_en
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.nonce_en
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.assoc_en
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.text_en
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.custom_en
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.input_valid
+@22
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.Data_in[31:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.data_keep[3:0]
+@28
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.data_last
+@1000200
+-inputs
+@800200
+-outputs
+@22
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.Data_out[31:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.output_keep[3:0]
+@28
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.output_valid
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.output_ready
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.output_last
+@1000200
+-outputs
+@28
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.done
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.error
+@800200
+-320-bit state
+@22
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.S0[63:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.S1[63:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.S2[63:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.S3[63:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.S4[63:0]
+@1000200
+-320-bit state
+@22
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.general_reg[127:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.text_counter[4:0]
+TOP.testharness.gen_USE_EXTERNAL_DEVICE_EXAMPLE.gen_ascon_coproc.ascon_coproc_i.ascon_stream_adapter_i.ascon_i.din_valid_cnt[2:0]
+[pattern_trace] 1
+[pattern_trace] 0

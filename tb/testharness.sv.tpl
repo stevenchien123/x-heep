@@ -80,9 +80,13 @@ module testharness #(
 % if xheep.is_extension_defined("testharness"):
   localparam bit FPU_SS_ZFINX = 1'b${th["FPU_SS_ZFINX"]};
   localparam bit QUADRILATERO = 1'b${th["QUADRILATERO"]};
+  localparam bit SIMPLE_XIF_COPROC = 1'b${th.get("SIMPLE_XIF_COPROC", 0)};
+  localparam bit ASCON_COPROC = 1'b${th.get("ASCON_COPROC", 0)};
 % else:
   localparam bit FPU_SS_ZFINX = 1'b0;
   localparam bit QUADRILATERO = 1'b0;
+  localparam bit SIMPLE_XIF_COPROC = 1'b0;
+  localparam bit ASCON_COPROC = 1'b0;
 % endif
 
   // Internal signals
@@ -241,6 +245,8 @@ module testharness #(
   initial begin
     $display("%t: the parameter FPU_SS_ZFINX is %x", $time, FPU_SS_ZFINX);
     $display("%t: the parameter QUADRILATERO is %x", $time, QUADRILATERO);
+    $display("%t: the parameter SIMPLE_XIF_COPROC is %x", $time, SIMPLE_XIF_COPROC);
+    $display("%t: the parameter ASCON_COPROC is %x", $time, ASCON_COPROC);
     $display("%t: the parameter JTAG_DPI is %x", $time, JTAG_DPI);
     $display("%t: the parameter EXT_DOMAINS is %x", $time, core_v_mini_mcu_pkg::EXTERNAL_DOMAINS);
     $display("%t: the parameter USE_EXTERNAL_DEVICE_EXAMPLE is %x", $time,
@@ -748,7 +754,7 @@ module testharness #(
       //          R4-type instruction format, with 3 source operands. One example is 'fmadd.s'. So
       //          make sure not to use CV32E20 if you need a RV32F-compliant system. The FPU is
       //          connected here just for testing purposes.
-      if ((core_v_mini_mcu_pkg::CpuType == cv32e40x || core_v_mini_mcu_pkg::CpuType == cv32e40px || (FPU_SS_ZFINX && core_v_mini_mcu_pkg::CpuType == cv32e20)) && ${"1" if xif != None else "0"} && (QUADRILATERO == 0)) begin: gen_fpu_ss_wrapper
+      if ((core_v_mini_mcu_pkg::CpuType == cv32e40x || core_v_mini_mcu_pkg::CpuType == cv32e40px || (FPU_SS_ZFINX && core_v_mini_mcu_pkg::CpuType == cv32e20)) && ${"1" if xif != None else "0"} && (QUADRILATERO == 0) && (SIMPLE_XIF_COPROC == 0 && ASCON_COPROC == 0)) begin: gen_fpu_ss_wrapper
         fpu_ss_wrapper #(
             .PULP_ZFINX(FPU_SS_ZFINX),
             .INPUT_BUFFER_DEPTH(1),
@@ -773,7 +779,7 @@ module testharness #(
 
       // Quadrilatero
       // ------------
-      if ((core_v_mini_mcu_pkg::CpuType == cv32e40x || core_v_mini_mcu_pkg::CpuType == cv32e40px || core_v_mini_mcu_pkg::CpuType == cv32e20) && ${"1" if xif != None else "0"} && (QUADRILATERO != 0)) begin: gen_quadrilatero_wrapper
+      if ((core_v_mini_mcu_pkg::CpuType == cv32e40x || core_v_mini_mcu_pkg::CpuType == cv32e40px || core_v_mini_mcu_pkg::CpuType == cv32e20) && ${"1" if xif != None else "0"} && (QUADRILATERO != 0) && (SIMPLE_XIF_COPROC == 0 && ASCON_COPROC == 0)) begin: gen_quadrilatero_wrapper
         quadrilatero_wrapper #(
             .MATRIX_FPU(0),
             .obi_req_t (obi_req_t),
@@ -806,6 +812,40 @@ module testharness #(
         assign ext_master_req[testharness_pkg::EXT_MASTER6_IDX] = '0;
         assign ext_master_req[testharness_pkg::EXT_MASTER7_IDX] = '0;
 
+      end
+
+      // Simple stateful CV-X-IF coprocessor
+      // -----------------------------------
+      if ((core_v_mini_mcu_pkg::CpuType == cv32e40px) && ${"1" if xif != None else "0"} && (SIMPLE_XIF_COPROC != 0) && (ASCON_COPROC == 0)) begin : gen_simple_xif_coproc
+        simple_xif_coproc #(
+            .X_ID_WIDTH(${xif.x_id_width if xif != None else "unsigned'(4)"})
+        ) simple_xif_coproc_i (
+            .clk_i,
+            .rst_ni,
+            .xif_compressed_if(ext_if),
+            .xif_issue_if     (ext_if),
+            .xif_commit_if    (ext_if),
+            .xif_mem_if       (ext_if),
+            .xif_mem_result_if(ext_if),
+            .xif_result_if    (ext_if)
+        );
+      end
+
+      // Ascon CV-X-IF coprocessor
+      // -----------------------------------
+      if ((core_v_mini_mcu_pkg::CpuType == cv32e40px) && ${"1" if xif != None else "0"} && (ASCON_COPROC != 0)) begin : gen_ascon_coproc
+        ascon_coproc #(
+            .X_ID_WIDTH(${xif.x_id_width if xif != None else "unsigned'(4)"})
+        ) ascon_coproc_i (
+            .clk_i,
+            .rst_ni,
+            .xif_compressed_if(ext_if),
+            .xif_issue_if     (ext_if),
+            .xif_commit_if    (ext_if),
+            .xif_mem_if       (ext_if),
+            .xif_mem_result_if(ext_if),
+            .xif_result_if    (ext_if)
+        );
       end
 
       % if user_peripheral_domain.contains_peripheral('serial_link_reg'):
