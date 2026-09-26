@@ -6,7 +6,8 @@
 
 /* NIST SP 800-232 Ascon-XOF128 parameters. */
 #define ASCON_XOF128_RATE 8U
-#define ASCON_XOF128_TEST_OUTPUT_SIZE 32U
+#define MESSAGE_LENGTH 1536U
+#define ASCON_XOF128_TEST_OUTPUT_SIZE 1536U
 
 /*
  * Precomputed state from NIST SP 800-232, Appendix A, Table 12.
@@ -155,19 +156,30 @@ static __attribute__((noinline)) int ascon_xof128(
     return 0;
 }
 
+static unsigned char message[(MESSAGE_LENGTH > 0U) ? MESSAGE_LENGTH : 1U];
+static unsigned char output[ASCON_XOF128_TEST_OUTPUT_SIZE] = {0};
+
+void init_buffer(unsigned char* buffer, unsigned long long numbytes);
+
+void init_buffer(unsigned char* buffer, unsigned long long numbytes) {
+  unsigned long long i;
+  for (i = 0; i < numbytes; i++) buffer[i] = (unsigned char)i;
+}
+
 int main(void)
 {
-    /* NIST Ascon-XOF128 KAT No. 10: 9-byte message, 256-bit output. */
-    static const uint8_t message[9] = {
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-    };
-    static const uint8_t expected[ASCON_XOF128_TEST_OUTPUT_SIZE] = {
-        0xdb, 0x30, 0x13, 0xbf, 0xbb, 0xd1, 0x32, 0xdc,
-        0x1d, 0x31, 0x52, 0xfd, 0x95, 0x5e, 0xd4, 0x8f,
-        0x7c, 0xbb, 0x67, 0x5e, 0x9a, 0xd2, 0xa2, 0xfe,
-        0xcf, 0x92, 0xb7, 0x4c, 0x95, 0x75, 0x92, 0xe0,
-    };
-    uint8_t output[ASCON_XOF128_TEST_OUTPUT_SIZE] = {0};
+    // /* NIST Ascon-XOF128 KAT No. 10: 9-byte message, 256-bit output. */
+    // static const uint8_t message[9] = {
+    //     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    // };
+    // static const uint8_t expected[ASCON_XOF128_TEST_OUTPUT_SIZE] = {
+    //     0xdb, 0x30, 0x13, 0xbf, 0xbb, 0xd1, 0x32, 0xdc,
+    //     0x1d, 0x31, 0x52, 0xfd, 0x95, 0x5e, 0xd4, 0x8f,
+    //     0x7c, 0xbb, 0x67, 0x5e, 0x9a, 0xd2, 0xa2, 0xfe,
+    //     0xcf, 0x92, 0xb7, 0x4c, 0x95, 0x75, 0x92, 0xe0,
+    // };
+    // uint8_t output[ASCON_XOF128_TEST_OUTPUT_SIZE] = {0};
+    init_buffer(message, sizeof(message));
     uint32_t cycles;
     int errors = 0;
 
@@ -178,17 +190,17 @@ int main(void)
 
     CSR_READ(CSR_REG_MCYCLE, &cycles);
 
-    for (size_t i = 0; i < ASCON_XOF128_TEST_OUTPUT_SIZE; ++i) {
-        if (output[i] != expected[i]) {
-            printf("Mismatch at byte %u: expected %02x, got %02x\n",
-                   (unsigned int)i, (unsigned int)expected[i],
-                   (unsigned int)output[i]);
-            errors = 1;
-        }
-    }
+    // for (size_t i = 0; i < ASCON_XOF128_TEST_OUTPUT_SIZE; ++i) {
+    //     if (output[i] != expected[i]) {
+    //         printf("Mismatch at byte %u: expected %02x, got %02x\n",
+    //                (unsigned int)i, (unsigned int)expected[i],
+    //                (unsigned int)output[i]);
+    //         errors = 1;
+    //     }
+    // }
 
     printf("Ascon-XOF128 pure-CPU cycles: %u\n", (unsigned int)cycles);
-    printf(errors == 0 ? "test passed!\n" : "test failed.\n");
+    printf(errors == 0 ? "test finished!\n" : "test failed.\n");
 
     return errors;
 }

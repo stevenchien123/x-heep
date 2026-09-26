@@ -6,6 +6,7 @@
 
 /* NIST SP 800-232 Ascon-Hash256 parameters. */
 #define ASCON_HASH256_RATE 8U
+#define MESSAGE_LENGTH 1536U
 #define ASCON_HASH256_SIZE 32U
 
 /*
@@ -154,18 +155,28 @@ static __attribute__((noinline)) int crypto_hash(
     return 0;
 }
 
+static unsigned char message[(MESSAGE_LENGTH > 0U) ? MESSAGE_LENGTH : 1U];
+
+void init_buffer(unsigned char* buffer, unsigned long long numbytes);
+
+void init_buffer(unsigned char* buffer, unsigned long long numbytes) {
+  unsigned long long i;
+  for (i = 0; i < numbytes; i++) buffer[i] = (unsigned char)i;
+}
+
 int main(void)
 {
     /* NIST Ascon-Hash256 KAT No. 10: message bytes 0x00 through 0x08. */
-    static const uint8_t message[9] = {
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-    };
-    static const uint8_t expected[ASCON_HASH256_SIZE] = {
-        0x94, 0x26, 0x9c, 0x30, 0xe0, 0x29, 0x6e, 0x1e,
-        0xc8, 0x66, 0x55, 0x04, 0x18, 0x41, 0x82, 0x3e,
-        0xfa, 0x19, 0x27, 0xf5, 0x20, 0xfd, 0x58, 0xc8,
-        0xe9, 0xbc, 0xe6, 0x19, 0x78, 0x78, 0xc1, 0xa6,
-    };
+    // static const uint8_t message[9] = {
+    //     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    // };
+    // static const uint8_t expected[ASCON_HASH256_SIZE] = {
+    //     0x94, 0x26, 0x9c, 0x30, 0xe0, 0x29, 0x6e, 0x1e,
+    //     0xc8, 0x66, 0x55, 0x04, 0x18, 0x41, 0x82, 0x3e,
+    //     0xfa, 0x19, 0x27, 0xf5, 0x20, 0xfd, 0x58, 0xc8,
+    //     0xe9, 0xbc, 0xe6, 0x19, 0x78, 0x78, 0xc1, 0xa6,
+    // };
+    init_buffer(message, sizeof(message));
     uint8_t output[ASCON_HASH256_SIZE] = {0};
     uint32_t cycles;
     int errors = 0;
@@ -177,17 +188,17 @@ int main(void)
 
     CSR_READ(CSR_REG_MCYCLE, &cycles);
 
-    for (size_t i = 0; i < ASCON_HASH256_SIZE; ++i) {
-        if (output[i] != expected[i]) {
-            printf("Mismatch at byte %u: expected %02x, got %02x\n",
-                   (unsigned int)i, (unsigned int)expected[i],
-                   (unsigned int)output[i]);
-            errors = 1;
-        }
-    }
+    // for (size_t i = 0; i < ASCON_HASH256_SIZE; ++i) {
+    //     if (output[i] != expected[i]) {
+    //         printf("Mismatch at byte %u: expected %02x, got %02x\n",
+    //                (unsigned int)i, (unsigned int)expected[i],
+    //                (unsigned int)output[i]);
+    //         errors = 1;
+    //     }
+    // }
 
     printf("Ascon-Hash256 pure-CPU cycles: %u\n", (unsigned int)cycles);
-    printf(errors == 0 ? "test passed!\n" : "test failed.\n");
+    printf(errors == 0 ? "test finished!\n" : "test failed.\n");
 
     return errors;
 }

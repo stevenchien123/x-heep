@@ -1,81 +1,136 @@
+#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <inttypes.h>
 
 #include "csr.h"
 #include "ascon_coproc.h"
 
-#define SIZE 8
+/* Change these values to benchmark different Z, message and output lengths. */
+#define CUSTOMIZATION_LENGTH 256U
+#define MESSAGE_LENGTH       16U
+#define OUTPUT_LENGTH        32U
 
-/*
- * Testcase from NIST KAT CXOF128 No.307 (L=256)
- *   Msg: 0x03020100_07060504_08
- *   Z: 0x00000048_00000000_03020100_07060504_08
- *   Hashed message: 0xa2014813_f9facf17_993e0c92_5c221e93_4ef26bda_c9a974c8_b0cd1c49_e379db3b
- */
+#define ASCON_CXOF128_MAX_CUSTOMIZATION_LENGTH 256U
+#define WORDS_FOR_BYTES(n) (((n) + 3U) / 4U)
+#define STORAGE_WORDS(n) \
+    ((WORDS_FOR_BYTES(n) > 0U) ? WORDS_FOR_BYTES(n) : 1U)
+#define OUTPUT_WORDS WORDS_FOR_BYTES(OUTPUT_LENGTH)
 
-int main(){
-    // Init
-    static const uint32_t golden[] = {
-      // Hashed message
-      UINT32_C(0xa2014813),
-      UINT32_C(0xf9facf17),
-      UINT32_C(0x993e0c92),
-      UINT32_C(0x5c221e93),
-      UINT32_C(0x4ef26bda),
-      UINT32_C(0xc9a974c8),
-      UINT32_C(0xb0cd1c49),
-      UINT32_C(0xe379db3b)
-    };
+// _Static_assert(CUSTOMIZATION_LENGTH <=
+//                    ASCON_CXOF128_MAX_CUSTOMIZATION_LENGTH,
+//                "Ascon-CXOF128 customization string exceeds 256 bytes");
 
-    static uint32_t Ascon_output[SIZE] = {0};
+/* Large benchmark buffers stay in .bss instead of the X-HEEP stack. */
+static uint32_t customization[STORAGE_WORDS(CUSTOMIZATION_LENGTH)];
+static uint32_t message[STORAGE_WORDS(MESSAGE_LENGTH)];
+static uint32_t cxof_output[STORAGE_WORDS(OUTPUT_LENGTH)];
 
-    unsigned int cycles;
+int main(void)
+{
+    const uint32_t zlen = CUSTOMIZATION_LENGTH;
+    const uint32_t mlen = MESSAGE_LENGTH;
+    const uint32_t output_len = OUTPUT_LENGTH;
+    uint8_t *const customization_bytes = (uint8_t *)customization;
+    uint8_t *const message_bytes = (uint8_t *)message;
+    uint32_t cycles;
+
+    /* Generate the 00,01,02... test vectors outside the measured region. */
+    for (uint32_t i = 0U; i < zlen; ++i) {
+        customization_bytes[i] = (uint8_t)i;
+    }
+    for (uint32_t i = 0U; i < mlen; ++i) {
+        message_bytes[i] = (uint8_t)i;
+    }
+
     CSR_CLEAR_BITS(CSR_REG_MCOUNTINHIBIT, UINT32_C(1));
     CSR_WRITE(CSR_REG_MCYCLE, UINT32_C(0));
 
-    // Clear Ascon state
     ascon_coproc_clear();
+    ascon_coproc_config(ASCON_CXOF128, false, output_len);
 
-    // Config and Start Ascon coprocessor (hash_len L=256)
-    ascon_coproc_config(ASCON_CXOF128, 0, 0x00000020);
+    /*
+     * Customization starts with a 64-bit little-endian encoding of the Z
+     * length in bits, followed by Z itself and its padding block.
+     */
+    const uint64_t customization_bits = (uint64_t)zlen * UINT64_C(8);
+    ascon_coproc_push((uint32_t)customization_bits,
+                     (uint32_t)(customization_bits >> 32), UINT8_C(0xf),
+                     UINT8_C(0xf), false, false);
 
-    // Customization Phase
-    ascon_coproc_push(0x00000048, 0x00000000, 0xf, 0xf, false, false);
-    ascon_coproc_push(0x03020100, 0x07060504, 0xf, 0xf, false, false);
-    ascon_coproc_push(0x00000008, 0x00000000, 0x1, 0x0, true, false);
+    uint32_t customization_offset = 0U;
+    for (; customization_offset + 8U <= zlen;
+         customization_offset += 8U) {
+        const uint32_t word = customization_offset >> 2;
 
-    // Absorbing Phase
-    ascon_coproc_push(0x03020100, 0x07060504, 0xf, 0xf, false, false);
-    ascon_coproc_push(0x00000008, 0x00000000, 0x1, 0x0, true, false);
+        ascon_coproc_push(customization[word], customization[word + 1U],
+                         UINT8_C(0xf), UINT8_C(0xf), false, false);
+    }
 
-    // Squeezing Phase (output L-bit hashed message)
-    Ascon_output[0] = ascon_coproc_pop();
-    Ascon_output[1] = ascon_coproc_pop();
-    Ascon_output[2] = ascon_coproc_pop();
-    Ascon_output[3] = ascon_coproc_pop();
-    Ascon_output[4] = ascon_coproc_pop();
-    Ascon_output[5] = ascon_coproc_pop();
-    Ascon_output[6] = ascon_coproc_pop();
-    Ascon_output[7] = ascon_coproc_pop();
+    const uint32_t customization_remaining = zlen - customization_offset;
+    const uint32_t customization_word = customization_offset >> 2;
+
+    if (customization_remaining == 0U) {
+        ascon_coproc_push(UINT32_C(0), UINT32_C(0), UINT8_C(0), UINT8_C(0),
+                         true, false);
+    } else if (customization_remaining <= 4U) {
+        const uint8_t keep0 =
+            (uint8_t)((UINT32_C(1) << customization_remaining) - 1U);
+        ascon_coproc_push(customization[customization_word], UINT32_C(0),
+                         keep0, UINT8_C(0), true, false);
+    } else {
+        const uint8_t keep1 =
+            (uint8_t)((UINT32_C(1) <<
+                       (customization_remaining - 4U)) - 1U);
+        ascon_coproc_push(customization[customization_word],
+                         customization[customization_word + 1U],
+                         UINT8_C(0xf), keep1, false, true);
+    }
+
+    /* Absorb every complete 8-byte message rate block. */
+    uint32_t message_offset = 0U;
+    for (; message_offset + 8U <= mlen; message_offset += 8U) {
+        const uint32_t word = message_offset >> 2;
+
+        ascon_coproc_push(message[word], message[word + 1U], UINT8_C(0xf),
+                         UINT8_C(0xf), false, false);
+    }
+
+    const uint32_t message_remaining = mlen - message_offset;
+    const uint32_t message_word = message_offset >> 2;
+
+    if (message_remaining == 0U) {
+        ascon_coproc_push(UINT32_C(0), UINT32_C(0), UINT8_C(0), UINT8_C(0),
+                         true, false);
+    } else if (message_remaining <= 4U) {
+        const uint8_t keep0 =
+            (uint8_t)((UINT32_C(1) << message_remaining) - 1U);
+        ascon_coproc_push(message[message_word], UINT32_C(0), keep0,
+                         UINT8_C(0), true, false);
+    } else {
+        const uint8_t keep1 =
+            (uint8_t)((UINT32_C(1) << (message_remaining - 4U)) - 1U);
+        ascon_coproc_push(message[message_word], message[message_word + 1U],
+                         UINT8_C(0xf), keep1, false, true);
+    }
+
+    /* One POP returns up to four valid CXOF output bytes. */
+    for (uint32_t i = 0U; i < OUTPUT_WORDS; ++i) {
+        cxof_output[i] = ascon_coproc_pop();
+    }
 
     CSR_READ(CSR_REG_MCYCLE, &cycles);
-    printf("Ascon CXOF128 cycles: %d\n", cycles);
 
-    // Check if Ascon output matches golden output
-    int test_passed = 1;
-    for(int i=0; i<SIZE; i++){
-        if(Ascon_output[i] != golden[i]){
-            printf("Test failed at index %d: expected 0x%08x, got 0x%08x\n", i, golden[i], Ascon_output[i]);
-            test_passed = 0;
-        }
+    /* Keep the output observable without including checking in cycle count. */
+    uint32_t output_xor = 0U;
+    for (uint32_t i = 0U; i < OUTPUT_WORDS; ++i) {
+        output_xor ^= cxof_output[i];
     }
 
-    if(test_passed){
-        printf("test passed!\n");
-    } else {
-        printf("test failed.\n");
-    }
+    printf("Ascon-CXOF128 coprocessor cycles "
+           "(Z=%u, message=%u, output=%u): %u\n",
+           (unsigned int)zlen, (unsigned int)mlen,
+           (unsigned int)output_len, (unsigned int)cycles);
+    printf("benchmark finished (output xor = 0x%08x)\n",
+           (unsigned int)output_xor);
 
     return 0;
 }

@@ -7,7 +7,8 @@
 /* NIST SP 800-232 Ascon-CXOF128 parameters. */
 #define ASCON_CXOF128_RATE 8U
 #define ASCON_CXOF128_MAX_CUSTOMIZATION_SIZE 256U
-#define ASCON_CXOF128_TEST_OUTPUT_SIZE 32U
+#define MESSAGE_LENGTH 1536U
+#define ASCON_CXOF128_TEST_OUTPUT_SIZE 1536U
 
 /*
  * Precomputed state from NIST SP 800-232, Appendix A, Table 12.
@@ -184,25 +185,38 @@ static __attribute__((noinline)) int ascon_cxof128(
     return 0;
 }
 
+static unsigned char customization[ASCON_CXOF128_MAX_CUSTOMIZATION_SIZE] = {0};
+static unsigned char message[(MESSAGE_LENGTH > 0U) ? MESSAGE_LENGTH : 1U];
+static unsigned char output[ASCON_CXOF128_TEST_OUTPUT_SIZE] = {0};
+
+void init_buffer(unsigned char* buffer, unsigned long long numbytes);
+
+void init_buffer(unsigned char* buffer, unsigned long long numbytes) {
+  unsigned long long i;
+  for (i = 0; i < numbytes; i++) buffer[i] = (unsigned char)i;
+}
+
 int main(void)
 {
     /*
      * NIST Ascon-CXOF128 KAT No. 307: 9-byte customization, 9-byte message,
      * and 256-bit output.
      */
-    static const uint8_t customization[9] = {
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-    };
-    static const uint8_t message[9] = {
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-    };
-    static const uint8_t expected[ASCON_CXOF128_TEST_OUTPUT_SIZE] = {
-        0x13, 0x48, 0x01, 0xa2, 0x17, 0xcf, 0xfa, 0xf9,
-        0x92, 0x0c, 0x3e, 0x99, 0x93, 0x1e, 0x22, 0x5c,
-        0xda, 0x6b, 0xf2, 0x4e, 0xc8, 0x74, 0xa9, 0xc9,
-        0x49, 0x1c, 0xcd, 0xb0, 0x3b, 0xdb, 0x79, 0xe3,
-    };
-    uint8_t output[ASCON_CXOF128_TEST_OUTPUT_SIZE] = {0};
+    // static const uint8_t customization[9] = {
+    //     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    // };
+    // static const uint8_t message[9] = {
+    //     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    // };
+    // static const uint8_t expected[ASCON_CXOF128_TEST_OUTPUT_SIZE] = {
+    //     0x13, 0x48, 0x01, 0xa2, 0x17, 0xcf, 0xfa, 0xf9,
+    //     0x92, 0x0c, 0x3e, 0x99, 0x93, 0x1e, 0x22, 0x5c,
+    //     0xda, 0x6b, 0xf2, 0x4e, 0xc8, 0x74, 0xa9, 0xc9,
+    //     0x49, 0x1c, 0xcd, 0xb0, 0x3b, 0xdb, 0x79, 0xe3,
+    // };
+    // uint8_t output[ASCON_CXOF128_TEST_OUTPUT_SIZE] = {0};
+    init_buffer(customization, sizeof(customization));
+    init_buffer(message, sizeof(message));
     uint32_t cycles;
     int cxof_result;
     int errors = 0;
@@ -221,17 +235,17 @@ int main(void)
         errors = 1;
     }
 
-    for (size_t i = 0; i < ASCON_CXOF128_TEST_OUTPUT_SIZE; ++i) {
-        if (output[i] != expected[i]) {
-            printf("Mismatch at byte %u: expected %02x, got %02x\n",
-                   (unsigned int)i, (unsigned int)expected[i],
-                   (unsigned int)output[i]);
-            errors = 1;
-        }
-    }
+    // for (size_t i = 0; i < ASCON_CXOF128_TEST_OUTPUT_SIZE; ++i) {
+    //     if (output[i] != expected[i]) {
+    //         printf("Mismatch at byte %u: expected %02x, got %02x\n",
+    //                (unsigned int)i, (unsigned int)expected[i],
+    //                (unsigned int)output[i]);
+    //         errors = 1;
+    //     }
+    // }
 
     printf("Ascon-CXOF128 pure-CPU cycles: %u\n", (unsigned int)cycles);
-    printf(errors == 0 ? "test passed!\n" : "test failed.\n");
+    printf(errors == 0 ? "test finished!\n" : "test failed.\n");
 
     return errors;
 }

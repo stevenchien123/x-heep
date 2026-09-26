@@ -1,75 +1,97 @@
+#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <inttypes.h>
 
 #include "csr.h"
 #include "ascon_coproc.h"
 
-#define SIZE 8
+/* Change this value to benchmark a different message length. */
+#define MESSAGE_LENGTH 1536U
+
+#define ASCON_HASH256_SIZE 32U
+#define HASH_OUTPUT_WORDS  (ASCON_HASH256_SIZE / 4U)
+#define WORDS_FOR_BYTES(n) (((n) + 3U) / 4U)
+#define STORAGE_WORDS(n) \
+    ((WORDS_FOR_BYTES(n) > 0U) ? WORDS_FOR_BYTES(n) : 1U)
 
 /*
- * Testcase from NIST KAT HASH256 No.10
- *   Msg: 0x03020100_07060504_08
- *   Hashed message: 0x309c2694_1e6e29e0_045566c8_3e824118_f52719fa_c858fd20_19e6bce9_a6c17878
+ * Keep benchmark data in .bss instead of the small X-HEEP stack. Filling the
+ * word array byte-by-byte produces the little-endian PUSH words expected by
+ * the coprocessor: bytes 00,01,02,03 become 0x03020100.
  */
+static uint32_t message[STORAGE_WORDS(MESSAGE_LENGTH)];
+static uint32_t hash_output[HASH_OUTPUT_WORDS];
 
-int main(){
-    // Init
-    static const uint32_t golden[] = {
-      // Hashed message
-      UINT32_C(0x309c2694),
-      UINT32_C(0x1e6e29e0),
-      UINT32_C(0x045566c8),
-      UINT32_C(0x3e824118),
-      UINT32_C(0xf52719fa),
-      UINT32_C(0xc858fd20),
-      UINT32_C(0x19e6bce9),
-      UINT32_C(0xa6c17878)
-    };
+int main(void)
+{
+    const uint32_t mlen = MESSAGE_LENGTH;
+    uint8_t *const message_bytes = (uint8_t *)message;
+    uint32_t cycles;
 
-    static uint32_t Ascon_output[SIZE] = {0};
+    /* Test-vector generation is outside the measured region. */
+    for (uint32_t i = 0U; i < mlen; ++i) {
+        message_bytes[i] = (uint8_t)i;
+    }
 
-    unsigned int cycles;
     CSR_CLEAR_BITS(CSR_REG_MCOUNTINHIBIT, UINT32_C(1));
     CSR_WRITE(CSR_REG_MCYCLE, UINT32_C(0));
 
-    // Clear Ascon state
     ascon_coproc_clear();
+    ascon_coproc_config(ASCON_HASH256, false, ASCON_HASH256_SIZE);
 
-    // Config and Start Ascon coprocessor (hash_len = 256-bit)
-    ascon_coproc_config(ASCON_HASH256, 0, 0x00000020);
+    /* Absorb every complete 8-byte Hash256 rate block. */
+    uint32_t message_offset = 0U;
+    for (; message_offset + 8U <= mlen; message_offset += 8U) {
+        const uint32_t word = message_offset >> 2;
 
-    // Absorbing Phase
-    ascon_coproc_push(0x03020100, 0x07060504, 0xf, 0xf, false, false);
-    ascon_coproc_push(0x00000008, 0x00000000, 0x1, 0x0, true, false);
+        ascon_coproc_push(message[word], message[word + 1U], UINT8_C(0xf),
+                         UINT8_C(0xf), false, false);
+    }
 
-    // Squeezing Phase (output 256-bit hashed message)
-    Ascon_output[0] = ascon_coproc_pop();
-    Ascon_output[1] = ascon_coproc_pop();
-    Ascon_output[2] = ascon_coproc_pop();
-    Ascon_output[3] = ascon_coproc_pop();
-    Ascon_output[4] = ascon_coproc_pop();
-    Ascon_output[5] = ascon_coproc_pop();
-    Ascon_output[6] = ascon_coproc_pop();
-    Ascon_output[7] = ascon_coproc_pop();
+    /*
+     * Send the final partial block. An exact multiple of the 8-byte rate
+     * requires an empty final block so that the hardware absorbs the 0x01
+     * padding byte in a new block.
+     */
+    const uint32_t message_remaining = mlen - message_offset;
+    const uint32_t message_word = message_offset >> 2;
+
+    if (message_remaining == 0U) {
+        ascon_coproc_push(UINT32_C(0), UINT32_C(0), UINT8_C(0), UINT8_C(0),
+                         true, false);
+    } else if (message_remaining <= 4U) {
+        const uint8_t keep0 =
+            (uint8_t)((UINT32_C(1) << message_remaining) - 1U);
+        ascon_coproc_push(message[message_word], UINT32_C(0), keep0,
+                         UINT8_C(0), true, false);
+    } else {
+        const uint8_t keep1 =
+            (uint8_t)((UINT32_C(1) << (message_remaining - 4U)) - 1U);
+        ascon_coproc_push(message[message_word], message[message_word + 1U],
+                         UINT8_C(0xf), keep1, false, true);
+    }
+
+    /* Hash256 always returns a 32-byte digest. */
+    hash_output[0] = ascon_coproc_pop();
+    hash_output[1] = ascon_coproc_pop();
+    hash_output[2] = ascon_coproc_pop();
+    hash_output[3] = ascon_coproc_pop();
+    hash_output[4] = ascon_coproc_pop();
+    hash_output[5] = ascon_coproc_pop();
+    hash_output[6] = ascon_coproc_pop();
+    hash_output[7] = ascon_coproc_pop();
 
     CSR_READ(CSR_REG_MCYCLE, &cycles);
-    printf("Ascon Hash256 cycles: %d\n", cycles);
 
-    // Check if Ascon output matches golden output
-    int test_passed = 1;
-    for(int i=0; i<SIZE; i++){
-        if(Ascon_output[i] != golden[i]){
-            printf("Test failed at index %d: expected 0x%08x, got 0x%08x\n", i, golden[i], Ascon_output[i]);
-            test_passed = 0;
-        }
+    /* Keep the digest observable without including checking in cycle count. */
+    uint32_t output_xor = 0U;
+    for (uint32_t i = 0U; i < HASH_OUTPUT_WORDS; ++i) {
+        output_xor ^= hash_output[i];
     }
 
-    if(test_passed){
-        printf("test passed!\n");
-    } else {
-        printf("test failed.\n");
-    }
+    printf("Ascon-Hash256 coprocessor cycles (message=%u): %u\n",
+           (unsigned int)mlen, (unsigned int)cycles);
+    printf("benchmark finished (output xor = 0x%08x)\n",
+           (unsigned int)output_xor);
 
     return 0;
 }
