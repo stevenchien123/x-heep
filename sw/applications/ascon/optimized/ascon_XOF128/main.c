@@ -6,7 +6,7 @@
 
 /* Change these two values to benchmark different input/output lengths. */
 #define MESSAGE_LENGTH 1536U
-#define OUTPUT_LENGTH  32U
+#define OUTPUT_LENGTH  1536U
 
 #define WORDS_FOR_BYTES(n) (((n) + 3U) / 4U)
 #define STORAGE_WORDS(n) \
@@ -70,8 +70,21 @@ int main(void)
                          UINT8_C(0xf), keep1, false, true);
     }
 
-    /* One POP returns up to four valid XOF output bytes. */
-    for (uint32_t i = 0U; i < OUTPUT_WORDS; ++i) {
+    /*
+     * Pop both 32-bit halves of each 64-bit XOF rate block before storing
+     * them, so the second POP is not delayed by the store and loop overhead.
+     */
+    uint32_t i = 0U;
+    for (; i + 1U < OUTPUT_WORDS; i += 2U) {
+        uint32_t word0 = ascon_coproc_pop();
+        uint32_t word1 = ascon_coproc_pop();
+
+        xof_output[i]      = word0;
+        xof_output[i + 1U] = word1;
+    }
+
+    /* Handle a final partial 64-bit block containing one 32-bit word. */
+    if (i < OUTPUT_WORDS) {
         xof_output[i] = ascon_coproc_pop();
     }
 

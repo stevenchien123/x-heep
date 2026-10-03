@@ -6,8 +6,8 @@
 
 /* Change these values to benchmark different Z, message and output lengths. */
 #define CUSTOMIZATION_LENGTH 256U
-#define MESSAGE_LENGTH       16U
-#define OUTPUT_LENGTH        32U
+#define MESSAGE_LENGTH       1536U
+#define OUTPUT_LENGTH        1536U
 
 #define ASCON_CXOF128_MAX_CUSTOMIZATION_LENGTH 256U
 #define WORDS_FOR_BYTES(n) (((n) + 3U) / 4U)
@@ -112,8 +112,21 @@ int main(void)
                          UINT8_C(0xf), keep1, false, true);
     }
 
-    /* One POP returns up to four valid CXOF output bytes. */
-    for (uint32_t i = 0U; i < OUTPUT_WORDS; ++i) {
+    /*
+     * Pop both 32-bit halves of each 64-bit CXOF rate block before storing
+     * them, so the second POP is not delayed by the store and loop overhead.
+     */
+    uint32_t i = 0U;
+    for (; i + 1U < OUTPUT_WORDS; i += 2U) {
+        uint32_t word0 = ascon_coproc_pop();
+        uint32_t word1 = ascon_coproc_pop();
+
+        cxof_output[i]      = word0;
+        cxof_output[i + 1U] = word1;
+    }
+
+    /* Handle a final partial 64-bit block containing one 32-bit word. */
+    if (i < OUTPUT_WORDS) {
         cxof_output[i] = ascon_coproc_pop();
     }
 
