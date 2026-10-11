@@ -1,0 +1,21 @@
+CAPI=2:
+
+name: "example:ip:ascon_accelerator"
+description: "Ascon CPU-fed loosely-coupled accelerator wrapper"
+
+filesets:
+  files_rtl:
+    files:
+    - rtl/ascon_wrapper_wodma.sv
+    file_type: systemVerilogSource
+
+  verilator_waiver:
+    files:
+    - ascon_accelerator.vlt
+    file_type: vlt
+
+targets:
+  default:
+    filesets:
+    - files_rtl
+    - tool_verilator ? (verilator_waiver)

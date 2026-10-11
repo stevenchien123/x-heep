@@ -98,6 +98,14 @@ package testharness_pkg;
   localparam logic [31:0] SIMPLE_ACC_END_ADDRESS = SIMPLE_ACC_START_ADDRESS + SIMPLE_ACC_SIZE;
   localparam logic [31:0] SIMPLE_ACC_IDX = 32'd3;
 
+  // The Ascon accelerator replaces the simple accelerator when enabled. Keep
+  // aliases with an accelerator-specific name so its testharness wiring does
+  // not depend on the implementation name of the default slot occupant.
+  localparam logic [31:0] ASCON_ACCELERATOR_START_ADDRESS = SIMPLE_ACC_START_ADDRESS;
+  localparam logic [31:0] ASCON_ACCELERATOR_SIZE = SIMPLE_ACC_SIZE;
+  localparam logic [31:0] ASCON_ACCELERATOR_END_ADDRESS = SIMPLE_ACC_END_ADDRESS;
+  localparam logic [31:0] ASCON_ACCELERATOR_IDX = SIMPLE_ACC_IDX;
+
   // External im2col SPC Peripheral
   localparam logic [31:0] IM2COL_SPC_START_ADDRESS = core_v_mini_mcu_pkg::EXT_PERIPHERAL_START_ADDRESS + 32'h04000;
   localparam logic [31:0] IM2COL_SPC_SIZE = 32'h100;

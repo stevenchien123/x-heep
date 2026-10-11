@@ -129,6 +129,7 @@ def config():
         "QUADRILATERO": 0,  # Enables Matrix custom RISC-V extensions. Admitted values: 1|0.
         "SIMPLE_XIF_COPROC": 0,  # Enables the simple XIF coprocessor. Admitted values: 1|0.
         "ASCON_COPROC": 1,  # Enables the Ascon coprocessor. Admitted values: 1|0.
+        "ASCON_ACCELERATOR": 1,  # Replaces the external simple accelerator in simulation.
     }
     system.add_extension("testharness", testharness_extension)
     system.add_extension("ascon", {"ASCON_COPROC": 1})

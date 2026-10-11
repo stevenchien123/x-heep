@@ -82,11 +82,15 @@ module testharness #(
   localparam bit QUADRILATERO = 1'b${th["QUADRILATERO"]};
   localparam bit SIMPLE_XIF_COPROC = 1'b${th.get("SIMPLE_XIF_COPROC", 0)};
   localparam bit ASCON_COPROC = 1'b${th.get("ASCON_COPROC", 0)};
+  localparam bit ASCON_ACCELERATOR = 1'b${th.get("ASCON_ACCELERATOR", 0)};
+  localparam bit ASCON_ACCELERATOR_WDMA = 1'b${th.get("ASCON_ACCELERATOR_WDMA", 0)};
 % else:
   localparam bit FPU_SS_ZFINX = 1'b0;
   localparam bit QUADRILATERO = 1'b0;
   localparam bit SIMPLE_XIF_COPROC = 1'b0;
   localparam bit ASCON_COPROC = 1'b0;
+  localparam bit ASCON_ACCELERATOR = 1'b0;
+  localparam bit ASCON_ACCELERATOR_WDMA = 1'b0;
 % endif
 
   // Internal signals
@@ -138,12 +142,23 @@ module testharness #(
   // External DMA slots
   logic [core_v_mini_mcu_pkg::DMA_CH_NUM-1:0] ext_dma_slot_tx;
   logic [core_v_mini_mcu_pkg::DMA_CH_NUM-1:0] ext_dma_slot_rx;
+  logic ascon_dma_input_ready;
+  logic ascon_dma_output_valid;
 
-  assign ext_dma_slot_tx[0] = iffifo_in_ready;
+  assign ext_dma_slot_tx[0] = (ASCON_ACCELERATOR && ASCON_ACCELERATOR_WDMA) ?
+      ascon_dma_input_ready : iffifo_in_ready;
   assign ext_dma_slot_rx[0] = iffifo_out_valid;
-  if (core_v_mini_mcu_pkg::DMA_CH_NUM > 1) begin : gen_dma_slot_tx
+  if (core_v_mini_mcu_pkg::DMA_CH_NUM == 2) begin : gen_two_dma_channels
     assign ext_dma_slot_tx[core_v_mini_mcu_pkg::DMA_CH_NUM-1:1] = '0;
     assign ext_dma_slot_rx[core_v_mini_mcu_pkg::DMA_CH_NUM-1:1] = '0;
+  end else if (core_v_mini_mcu_pkg::DMA_CH_NUM > 2) begin : gen_many_dma_channels
+    assign ext_dma_slot_tx[core_v_mini_mcu_pkg::DMA_CH_NUM-1:1] = '0;
+    assign ext_dma_slot_rx[1] = 1'b0;
+    assign ext_dma_slot_rx[2] = (ASCON_ACCELERATOR && ASCON_ACCELERATOR_WDMA) ?
+        ascon_dma_output_valid : 1'b0;
+    if (core_v_mini_mcu_pkg::DMA_CH_NUM > 3) begin : gen_unused_dma_rx_channels
+      assign ext_dma_slot_rx[core_v_mini_mcu_pkg::DMA_CH_NUM-1:3] = '0;
+    end
   end
 
   // External xbar master/slave and peripheral ports
@@ -207,7 +222,7 @@ module testharness #(
   logic [EXT_DOMAINS_RND-1:0] external_ram_banks_set_retentive_n;
   logic [EXT_DOMAINS_RND-1:0] external_subsystem_clkgate_en_n;
 
-  //simple accelerator external domain
+  // External accelerator power domain
   logic simple_acc_rst_n, simple_acc_clk;
 
   // CORE-V eXtension Interface (CV-X-IF)
@@ -247,6 +262,9 @@ module testharness #(
     $display("%t: the parameter QUADRILATERO is %x", $time, QUADRILATERO);
     $display("%t: the parameter SIMPLE_XIF_COPROC is %x", $time, SIMPLE_XIF_COPROC);
     $display("%t: the parameter ASCON_COPROC is %x", $time, ASCON_COPROC);
+    $display("%t: the parameter ASCON_ACCELERATOR is %x", $time, ASCON_ACCELERATOR);
+    $display("%t: the parameter ASCON_ACCELERATOR_WDMA is %x", $time,
+             ASCON_ACCELERATOR_WDMA);
     $display("%t: the parameter JTAG_DPI is %x", $time, JTAG_DPI);
     $display("%t: the parameter EXT_DOMAINS is %x", $time, core_v_mini_mcu_pkg::EXTERNAL_DOMAINS);
     $display("%t: the parameter USE_EXTERNAL_DEVICE_EXAMPLE is %x", $time,
@@ -623,21 +641,58 @@ module testharness #(
         assign simple_acc_clk   = clk_i;
       end
 
-      simple_accelerator #(
-          .reg_req_t (reg_req_t),
-          .reg_rsp_t (reg_rsp_t),
-          .obi_req_t (obi_req_t),
-          .obi_rsp_t(obi_rsp_t)
-      ) simple_accelerator_i (
-          .clk_i(simple_acc_clk),
-          .rst_ni(simple_acc_rst_n),
-          .reg_req_i(ext_periph_slv_req[testharness_pkg::SIMPLE_ACC_IDX]),
-          .reg_rsp_o(ext_periph_slv_rsp[testharness_pkg::SIMPLE_ACC_IDX]),
-          .acc_read_ch0_req_o(ext_master_req[testharness_pkg::EXT_MASTER2_IDX]),
-          .acc_read_ch0_resp_i(ext_master_resp[testharness_pkg::EXT_MASTER2_IDX]),
-          .acc_write_ch0_req_o(ext_master_req[testharness_pkg::EXT_MASTER3_IDX]),
-          .acc_write_ch0_resp_i(ext_master_resp[testharness_pkg::EXT_MASTER3_IDX])
-      );
+      if (ASCON_ACCELERATOR != 0) begin : gen_ascon_accelerator
+        if (ASCON_ACCELERATOR_WDMA != 0) begin : gen_wdma
+          ascon_wrapper_wdma #(
+              .reg_req_t(reg_req_t),
+              .reg_rsp_t(reg_rsp_t)
+          ) ascon_accelerator_i (
+              .clk_i(simple_acc_clk),
+              .rst_ni(simple_acc_rst_n),
+              .reg_req_i(ext_periph_slv_req[testharness_pkg::ASCON_ACCELERATOR_IDX]),
+              .reg_rsp_o(ext_periph_slv_rsp[testharness_pkg::ASCON_ACCELERATOR_IDX]),
+              .dma_input_ready_o(ascon_dma_input_ready),
+              .dma_output_valid_o(ascon_dma_output_valid)
+          );
+        end else begin : gen_wodma
+          ascon_wrapper_wodma #(
+              .reg_req_t(reg_req_t),
+              .reg_rsp_t(reg_rsp_t)
+          ) ascon_accelerator_i (
+              .clk_i(simple_acc_clk),
+              .rst_ni(simple_acc_rst_n),
+              .reg_req_i(ext_periph_slv_req[testharness_pkg::ASCON_ACCELERATOR_IDX]),
+              .reg_rsp_o(ext_periph_slv_rsp[testharness_pkg::ASCON_ACCELERATOR_IDX])
+          );
+
+          assign ascon_dma_input_ready = 1'b0;
+          assign ascon_dma_output_valid = 1'b0;
+        end
+
+        // The CPU-fed implementation has no OBI master ports. Keep the two
+        // external-bus slots reserved by the simple accelerator quiescent.
+        assign ext_master_req[testharness_pkg::EXT_MASTER2_IDX] = '0;
+        assign ext_master_req[testharness_pkg::EXT_MASTER3_IDX] = '0;
+      end else begin : gen_simple_accelerator
+        assign ascon_dma_input_ready = 1'b0;
+        assign ascon_dma_output_valid = 1'b0;
+
+        simple_accelerator #(
+            .reg_req_t(reg_req_t),
+            .reg_rsp_t(reg_rsp_t),
+            .obi_req_t(obi_req_t),
+            .obi_rsp_t(obi_rsp_t)
+        ) simple_accelerator_i (
+            .clk_i(simple_acc_clk),
+            .rst_ni(simple_acc_rst_n),
+            .reg_req_i(ext_periph_slv_req[testharness_pkg::SIMPLE_ACC_IDX]),
+            .reg_rsp_o(ext_periph_slv_rsp[testharness_pkg::SIMPLE_ACC_IDX]),
+            .acc_read_ch0_req_o(ext_master_req[testharness_pkg::EXT_MASTER2_IDX]),
+            .acc_read_ch0_resp_i(ext_master_resp[testharness_pkg::EXT_MASTER2_IDX]),
+            .acc_write_ch0_req_o(ext_master_req[testharness_pkg::EXT_MASTER3_IDX]),
+            .acc_write_ch0_resp_i(ext_master_resp[testharness_pkg::EXT_MASTER3_IDX])
+        );
+      end
 
       im2col_spc #(
         .reg_req_t(reg_req_t),

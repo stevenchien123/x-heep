@@ -1,0 +1,15 @@
+CAPI=2:
+
+name: "example:ip:ascon_accelerator_wdma"
+description: "Ascon DMA-fed loosely-coupled accelerator wrapper"
+
+filesets:
+  files_rtl:
+    files:
+    - rtl/ascon_wrapper_wdma.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+    - files_rtl

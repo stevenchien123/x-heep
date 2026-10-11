@@ -1,0 +1,5 @@
+// The testbench reset is sampled synchronously by SimJTAG and used as the
+// asynchronous assertion input of the Ascon reset synchronizer by design.
+`verilator_config
+
+lint_off -rule SYNCASYNCNET -file "*SimJTAG.sv" -match "*"

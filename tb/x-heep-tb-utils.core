@@ -17,6 +17,8 @@ filesets:
     - example:ip:iffifo
     - example:ip:i2s_microphone
     - example:ip:simple_accelerator
+    - example:ip:ascon_accelerator
+    - example:ip:ascon_accelerator_wdma
     - example:ip:dlc
     - example:ip:im2col_spc
     - example:ip:dlc

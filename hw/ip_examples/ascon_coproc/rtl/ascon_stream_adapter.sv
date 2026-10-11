@@ -23,7 +23,11 @@ module ascon_stream_adapter (
     output logic [31:0] pop_data,
 
     // Adapter -> Coproc: busy signal
-    output logic busy_o
+    output logic busy_o,
+
+    // Pulses when the current command completes.  This lets the outer CV-X-IF
+    // controller enter RESULT without waiting an extra cycle for busy_o to fall.
+    output logic command_done_o
 );
   typedef enum logic [4:0] {
     CMD_CONFIG = 5'b00001,
@@ -35,7 +39,6 @@ module ascon_stream_adapter (
 
   typedef enum logic [2:0] {
     IDLE,
-    WAIT_CONFIG,
     WAIT_PUSH,
     WAIT_POP,
     ASSERT_CLEAR,
@@ -63,8 +66,26 @@ module ascon_stream_adapter (
   logic [31:0] data_out;
   logic done, error;
   logic done_reg, error_reg;
-  assign start = (cur_state == WAIT_CONFIG);
+  logic input_accept, output_accept;
+  logic [1:0] core_mode;
+  logic core_ed;
+  logic [31:0] core_hash_len;
+
+  // CONFIG is consumed directly in the issue cycle.  The direct muxes are
+  // required because cfg_*_reg is updated at the same clock edge at which the
+  // Ascon core samples start and its configuration inputs.
+  assign start = (cur_state == IDLE) && command_valid && (command_type == CMD_CONFIG);
+  assign core_mode = start ? cfg_mode : cfg_mode_reg;
+  assign core_ed = start ? cfg_ed : cfg_ed_reg;
+  assign core_hash_len = start ? cfg_hash_len : cfg_hash_len_reg;
+
   assign input_ready = (key_en || nonce_en || assoc_en || text_en || custom_en);
+
+  // An input/output word is accepted only when the Ascon core can advance as a
+  // whole.  In particular, a blocked output must not make the adapter consume
+  // an input word that the core has not actually sampled.
+  assign input_accept = input_valid && input_ready && (!output_valid || output_ready);
+  assign output_accept = output_valid && output_ready && (!input_ready || input_valid);
 
   logic rst_complete_o, rst_clear_n, rst_ascon_n;
   // A pulse reset signal
@@ -76,8 +97,12 @@ module ascon_stream_adapter (
     if (!rst_ni) begin
       counter <= '0;
     end else begin
-      if (cur_state == WAIT_PUSH && input_valid && input_ready) begin
-        counter <= counter + 1;
+      if (cur_state == IDLE && command_valid && (command_type == CMD_PUSH)) begin
+        // The first word is offered directly in the issue cycle.  If it is
+        // accepted and a second word exists, WAIT_PUSH starts from word 1.
+        counter <= (input_accept && !push_last0) ? 1'b1 : 1'b0;
+      end else if (cur_state == WAIT_PUSH && input_accept) begin
+        counter <= counter + 1'b1;
       end else if (cur_state != WAIT_PUSH) begin
         counter <= '0;
       end
@@ -90,7 +115,14 @@ module ascon_stream_adapter (
     data_in_last = 1'b0;
     input_valid = 1'b0;
 
-    if (cur_state == WAIT_PUSH) begin
+    if (cur_state == IDLE && command_valid && (command_type == CMD_PUSH)) begin
+      // Fast path: do not spend a cycle merely copying the first PUSH word into
+      // the adapter registers.
+      input_valid = 1'b1;
+      data_in = push_data0;
+      data_in_keep = push_keep0;
+      data_in_last = push_last0;
+    end else if (cur_state == WAIT_PUSH) begin
       input_valid = 1'b1;
       if (counter == 0) begin
         data_in = push_data0_reg;
@@ -108,14 +140,17 @@ module ascon_stream_adapter (
     if (!rst_ni) begin
       pop_data <= '0;
     end else begin
-      if (cur_state == WAIT_POP && output_valid && output_ready) begin
+      if (output_accept) begin
         pop_data <= data_out;
-      end else if (cur_state == WAIT_STATUS && (done || done_reg)) begin
+      end else if (((cur_state == IDLE && command_valid && (command_type == CMD_STATUS)) ||
+                    cur_state == WAIT_STATUS) && (done || done_reg)) begin
         pop_data <= {31'b0, error || error_reg};
       end
     end
   end
-  assign output_ready = (cur_state == WAIT_POP);
+  // POP also has a direct path when the core is already presenting output.
+  assign output_ready = (cur_state == WAIT_POP) ||
+                        (cur_state == IDLE && command_valid && (command_type == CMD_POP));
 
   // STATUS may execute after done signal is asserted, so we need to latch the done/error signals to ensure they are available for STATUS command.
   always_ff @(posedge clk_i or negedge rst_ni) begin : done_error_reg_logic
@@ -147,31 +182,36 @@ module ascon_stream_adapter (
       IDLE: begin
         if (command_valid) begin
           unique case (command_type)
-            CMD_CONFIG: nxt_state = WAIT_CONFIG;
-            CMD_PUSH:   nxt_state = WAIT_PUSH;
-            CMD_POP:    nxt_state = WAIT_POP;
+            CMD_CONFIG: nxt_state = IDLE;
+            CMD_PUSH: begin
+              if (input_accept && push_last0) nxt_state = IDLE;
+              else nxt_state = WAIT_PUSH;
+            end
+            CMD_POP: begin
+              if (output_accept) nxt_state = IDLE;
+              else nxt_state = WAIT_POP;
+            end
             CMD_CLEAR:  nxt_state = ASSERT_CLEAR;
-            CMD_STATUS: nxt_state = WAIT_STATUS;
+            CMD_STATUS: begin
+              if (done || done_reg) nxt_state = IDLE;
+              else nxt_state = WAIT_STATUS;
+            end
             default:    nxt_state = IDLE;
           endcase
         end
-      end
-
-      WAIT_CONFIG: begin
-        nxt_state = IDLE;
       end
 
       WAIT_PUSH: begin
         // the value of nxt_state is depends on push_last0/1,
         // if push_last0 is set, only send 1 32-bit data into Ascon, nxt_state is IDLE,
         // otherwise, send 2 32-bit data into Ascon, stay in WAIT_PUSH until the second data was sent.
-        if (input_valid && input_ready && (push_last0_reg || counter == 1)) begin
+        if (input_accept && (push_last0_reg || counter == 1)) begin
           nxt_state = IDLE;
         end
       end
 
       WAIT_POP: begin
-        if (output_valid && output_ready) begin
+        if (output_accept) begin
           nxt_state = IDLE;
         end
       end
@@ -191,6 +231,32 @@ module ascon_stream_adapter (
           nxt_state = IDLE;
         end
       end
+    endcase
+  end
+
+  // Report completion in the actual handshake cycle rather than one cycle
+  // later after cur_state has returned to IDLE.
+  always_comb begin : command_done_logic
+    command_done_o = 1'b0;
+
+    unique case (cur_state)
+      IDLE: begin
+        if (command_valid) begin
+          unique case (command_type)
+            CMD_CONFIG: command_done_o = 1'b1;
+            CMD_PUSH:   command_done_o = input_accept && push_last0;
+            CMD_POP:    command_done_o = output_accept;
+            CMD_STATUS: command_done_o = done || done_reg;
+            default:    command_done_o = 1'b0;
+          endcase
+        end
+      end
+
+      WAIT_PUSH:   command_done_o = input_accept && (push_last0_reg || counter == 1);
+      WAIT_POP:    command_done_o = output_accept;
+      WAIT_CLEAR:  command_done_o = rst_complete_o;
+      WAIT_STATUS: command_done_o = done || done_reg;
+      default:     command_done_o = 1'b0;
     endcase
   end
 
@@ -230,8 +296,8 @@ module ascon_stream_adapter (
       .rst(~rst_ascon_n),
       .rst_complete_o(rst_complete_o),
       .start(start),
-      .mode(cfg_mode_reg),
-      .ED(cfg_ed_reg),
+      .mode(core_mode),
+      .ED(core_ed),
       .key_en(key_en),
       .nonce_en(nonce_en),
       .assoc_en(assoc_en),
@@ -241,7 +307,7 @@ module ascon_stream_adapter (
       .Data_in(data_in),
       .data_last(data_in_last),
       .data_keep(data_in_keep),
-      .hash_len(cfg_hash_len_reg),
+      .hash_len(core_hash_len),
       .Data_out(data_out),
       .output_valid(output_valid),
       .output_ready(output_ready),

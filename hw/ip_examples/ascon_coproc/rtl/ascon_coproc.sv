@@ -87,6 +87,7 @@ module ascon_coproc #(
   logic        push_last1;
   logic [31:0] pop_data;
   logic        ascon_busy;
+  logic        command_done;
   assign command_type = {is_status, is_clear, is_pop, is_push, is_config};
   assign command_valid = xif_issue_if.issue_valid && xif_issue_if.issue_ready && instruction_supported;
   assign cfg_mode = xif_issue_if.issue_req.rs[0][1:0];
@@ -115,13 +116,19 @@ module ascon_coproc #(
     unique case (cur_state)
       IDLE: begin
         if (xif_issue_if.issue_valid && xif_issue_if.issue_ready) begin
-          if (instruction_supported) nxt_state = WAIT_ASCON;
-          else nxt_state = IDLE;
+          if (instruction_supported) begin
+            // CONFIG and ready PUSH/POP/STATUS commands may complete in the
+            // issue cycle.  Skip WAIT_ASCON for those fast-path commands.
+            if (command_done) nxt_state = RESULT;
+            else nxt_state = WAIT_ASCON;
+          end else nxt_state = IDLE;
         end
       end
 
       WAIT_ASCON: begin
-        if (!ascon_busy) begin
+        // command_done removes the old one-cycle delay between the final
+        // adapter handshake and observing busy_o deasserted.
+        if (command_done || !ascon_busy) begin
           nxt_state = RESULT;
         end
       end
@@ -224,7 +231,8 @@ module ascon_coproc #(
       .push_last0(push_last0),
       .push_last1(push_last1),
       .pop_data(pop_data),
-      .busy_o(ascon_busy)
+      .busy_o(ascon_busy),
+      .command_done_o(command_done)
   );
 
 

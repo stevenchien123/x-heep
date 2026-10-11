@@ -821,8 +821,7 @@ module Ascon (
       unique case (cur_state)
         IDLE: text_counter <= 5'd0;
         INITIALIZATION, HASHINIT: begin
-          if (input_fire)
-            text_counter <= text_counter + {2'd0, din_valid_cnt};
+          if (input_fire) text_counter <= text_counter + {2'd0, din_valid_cnt};
         end
         AD_TEXT: begin
           if (!inter_final && input_fire)
