@@ -5,9 +5,15 @@
 #include "ascon_coproc.h"
 
 /* Change these values to benchmark different Z, message and output lengths. */
+#ifndef CUSTOMIZATION_LENGTH
 #define CUSTOMIZATION_LENGTH 256U
+#endif
+#ifndef MESSAGE_LENGTH
 #define MESSAGE_LENGTH       1536U
+#endif
+#ifndef OUTPUT_LENGTH
 #define OUTPUT_LENGTH        1536U
+#endif
 
 #define ASCON_CXOF128_MAX_CUSTOMIZATION_LENGTH 256U
 #define WORDS_FOR_BYTES(n) (((n) + 3U) / 4U)

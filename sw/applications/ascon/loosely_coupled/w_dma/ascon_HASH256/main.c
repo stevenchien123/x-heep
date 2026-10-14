@@ -17,6 +17,14 @@ static uint32_t output[HASH_BYTES / 4U];
 static ascon_dma_job_t input_job;
 static ascon_dma_job_t output_job;
 
+/* Poll without DMA interrupts so mcycle measures full elapsed operation time. */
+static uint32_t busy_wait_operation(const ascon_accel_t *accelerator)
+{
+    ascon_dma_wait(&output_job);
+    ascon_dma_wait(&input_job);
+    return ascon_accel_wait_done(accelerator);
+}
+
 int main(void)
 {
     const ascon_accel_t accelerator =
@@ -24,8 +32,7 @@ int main(void)
     uint8_t *const message_bytes = (uint8_t *)message;
     const uint32_t input_words = WORDS_FOR_BYTES(MESSAGE_LENGTH);
     uint32_t dma_cold_init_cycles;
-    uint32_t setup_cycles;
-    uint32_t total_cycles;
+    uint32_t cycles;
 
     for (uint32_t i = 0U; i < MESSAGE_LENGTH; ++i)
         message_bytes[i] = (uint8_t)i;
@@ -35,7 +42,8 @@ int main(void)
     dma_init(NULL);
     dma_config_flags_t result = ascon_dma_prepare_input(
         &input_job, message, input_words);
-    result |= ascon_dma_prepare_output(&output_job, output, HASH_BYTES / 4U);
+    result |= ascon_dma_prepare_output(
+        &output_job, output, HASH_BYTES / 4U, DMA_TRANS_END_POLLING);
     CSR_READ(CSR_REG_MCYCLE, &dma_cold_init_cycles);
     if (result != DMA_CONFIG_OK) {
         printf("DMA channel init failed: 0x%04x\n", (unsigned int)result);
@@ -53,28 +61,26 @@ int main(void)
         return 1;
     }
 
-    CSR_READ(CSR_REG_MCYCLE, &setup_cycles);
     ascon_accel_start(&accelerator);
-    const uint32_t status = ascon_dma_wait_operation(
-        &accelerator, &input_job, &output_job);
-    CSR_READ(CSR_REG_MCYCLE, &total_cycles);
+    const uint32_t status = busy_wait_operation(&accelerator);
+    CSR_READ(CSR_REG_MCYCLE, &cycles);
+
+    const uint32_t hw_cycles = ascon_accel_read(
+        &accelerator, ASCON_ACCEL_CYCLE_COUNT_OFFSET);
+    const uint32_t input_wait = ascon_accel_read(
+        &accelerator, ASCON_ACCEL_INPUT_WAIT_OFFSET);
+    const uint32_t output_wait = ascon_accel_read(
+        &accelerator, ASCON_ACCEL_OUTPUT_WAIT_OFFSET);
 
     uint32_t output_xor = 0U;
     for (uint32_t i = 0U; i < HASH_BYTES / 4U; ++i) output_xor ^= output[i];
 
-    printf("Ascon DMA reusable channel cold init: %u cycles\n",
+    printf("Ascon DMA reusable channel cold init cycles: %u\n",
            (unsigned int)dma_cold_init_cycles);
-    printf("Ascon-Hash256 DMA no-FIFO fast (message=%u): "
-           "cpu_total=%u cpu_exec=%u hw=%u input_wait=%u "
-           "output_wait=%u xor=0x%08x\n",
-           (unsigned int)MESSAGE_LENGTH, (unsigned int)total_cycles,
-           (unsigned int)(total_cycles - setup_cycles),
-           (unsigned int)ascon_accel_read(&accelerator,
-                                           ASCON_ACCEL_CYCLE_COUNT_OFFSET),
-           (unsigned int)ascon_accel_read(&accelerator,
-                                           ASCON_ACCEL_INPUT_WAIT_OFFSET),
-           (unsigned int)ascon_accel_read(&accelerator,
-                                           ASCON_ACCEL_OUTPUT_WAIT_OFFSET),
-           (unsigned int)output_xor);
+    printf("Ascon HASH256 DMA warm cycles (message=%u): %u\n",
+           (unsigned int)MESSAGE_LENGTH, (unsigned int)cycles);
+    printf("  hardware=%u input_wait=%u output_wait=%u xor=0x%08x\n",
+           (unsigned int)hw_cycles, (unsigned int)input_wait,
+           (unsigned int)output_wait, (unsigned int)output_xor);
     return (status & ASCON_ACCEL_STATUS_ERROR) != 0U;
 }

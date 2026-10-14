@@ -6,10 +6,10 @@
 
 /* Change these two values to benchmark different AD/PT lengths. */
 #ifndef AD_LENGTH
-#define AD_LENGTH 0U
+#define AD_LENGTH 16U
 #endif
 #ifndef MESSAGE_LENGTH
-#define MESSAGE_LENGTH 1536U
+#define MESSAGE_LENGTH 0U
 #endif
 
 #define WORDS_FOR_BYTES(length) (((length) + 3U) / 4U)

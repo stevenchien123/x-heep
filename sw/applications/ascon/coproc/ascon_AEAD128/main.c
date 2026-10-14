@@ -5,8 +5,12 @@
 #include "ascon_coproc.h"
 
 /* Change these two values to benchmark different AD/PT lengths. */
-#define AD_LENGTH      10000U
-#define MESSAGE_LENGTH 10000U
+#ifndef AD_LENGTH
+#define AD_LENGTH      1536U
+#endif
+#ifndef MESSAGE_LENGTH
+#define MESSAGE_LENGTH 0U
+#endif
 
 #define WORDS_FOR_BYTES(length) (((length) + 3U) / 4U)
 #define STORAGE_WORDS(length) \

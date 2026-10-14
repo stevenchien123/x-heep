@@ -5,7 +5,9 @@
 #include "ascon_coproc.h"
 
 /* Change this value to benchmark a different message length. */
-#define MESSAGE_LENGTH 1536U
+#ifndef MESSAGE_LENGTH
+#define MESSAGE_LENGTH 16U
+#endif
 
 #define ASCON_HASH256_SIZE 32U
 #define HASH_OUTPUT_WORDS  (ASCON_HASH256_SIZE / 4U)

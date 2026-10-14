@@ -5,8 +5,12 @@
 #include "ascon_coproc.h"
 
 /* Change these two values to benchmark different input/output lengths. */
+#ifndef MESSAGE_LENGTH
 #define MESSAGE_LENGTH 1536U
+#endif
+#ifndef OUTPUT_LENGTH
 #define OUTPUT_LENGTH  1536U
+#endif
 
 #define WORDS_FOR_BYTES(n) (((n) + 3U) / 4U)
 #define STORAGE_WORDS(n) \

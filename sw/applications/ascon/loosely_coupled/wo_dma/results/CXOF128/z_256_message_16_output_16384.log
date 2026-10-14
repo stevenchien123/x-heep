@@ -1,0 +1,178 @@
+Algorithm: CXOF128
+Case: z_256_message_16_output_16384
+CDEFS: CUSTOMIZATION_LENGTH=256U;MESSAGE_LENGTH=16U;OUTPUT_LENGTH=16384U
+
+$You are executing from: /workspace/x-heep
+USING MINICONDA core-v-mini-mcu
+rm -f -r sw/build
+make[1]: Entering directory '/workspace/x-heep/sw'
+[1;32mINFO: Using RISCV_XHEEP from environment or command line: /tools/riscv[0m
+Re-run cmake no build system arguments
+-- The ASM compiler identification is GNU
+-- Found assembler: /tools/riscv/bin/riscv32-unknown-elf-gcc
+-- The C compiler identification is GNU 12.2.0
+-- The CXX compiler identification is GNU 12.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /tools/riscv/bin/riscv32-unknown-elf-gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /tools/riscv/bin/riscv32-unknown-elf-g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+[35mInternal application[m
+[33mCompiler flags:     -march=rv32imc_zicsr     -w -O2 -g     -nostartfiles     -ffunction-sections     -DHOST_BUILD     -DON_CHIP     -DINTERNAL_CRTO     -DportasmHANDLE_INTERRUPT=vSystemIrqHandler      [m
+[35mLinker file: /workspace/x-heep/sw/linker/link.ld[m
+-- [35mCLANG_LINKER_USE_LD = '0'
+-- [35mUsing GCC specific linker flags[m
+[32mRISCV_XHEEP env variable: /tools/riscv
+[35mLib Folder RISCV-GCC: /tools/riscv/riscv32-unknown-elf/lib[m
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /workspace/x-heep/sw/build
+Build
+make -s -C build
+make[2]: Entering directory '/workspace/x-heep/sw/build'
+make[3]: Entering directory '/workspace/x-heep/sw/build'
+make[4]: Entering directory '/workspace/x-heep/sw/build'
+Dependee "/workspace/x-heep/sw/build/CMakeFiles/main.elf.dir/DependInfo.cmake" is newer than depender "/workspace/x-heep/sw/build/CMakeFiles/main.elf.dir/depend.internal".
+Dependee "/workspace/x-heep/sw/build/CMakeFiles/CMakeDirectoryInformation.cmake" is newer than depender "/workspace/x-heep/sw/build/CMakeFiles/main.elf.dir/depend.internal".
+Scanning dependencies of target main.elf
+make[4]: Leaving directory '/workspace/x-heep/sw/build'
+make[4]: Entering directory '/workspace/x-heep/sw/build'
+[  2%] Building C object CMakeFiles/main.elf.dir/applications/ascon/loosely_coupled/wo_dma/ascon_CXOF128/main.c.obj
+[  5%] Building ASM object CMakeFiles/main.elf.dir/device/lib/crt/crt0.S.obj
+[  8%] Building ASM object CMakeFiles/main.elf.dir/device/lib/crt/vectors.S.obj
+[ 11%] Building C object CMakeFiles/main.elf.dir/device/bsp/w25q/w25q.c.obj
+In file included from /workspace/x-heep/sw/device/bsp/w25q/w25q.c:58:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 13%] Building C object CMakeFiles/main.elf.dir/device/lib/base/memory.c.obj
+[ 16%] Building C object CMakeFiles/main.elf.dir/device/lib/base/mmio.c.obj
+[ 19%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/dma/dma.c.obj
+[ 22%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/fast_intr_ctrl/fast_intr_ctrl.c.obj
+[ 25%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/gpio/gpio.c.obj
+In file included from /workspace/x-heep/sw/device/lib/drivers/gpio/gpio.c:40:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 27%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/i2c/i2c.c.obj
+[ 30%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/i2s/i2s.c.obj
+[ 33%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/im2col_spc/im2col.c.obj
+In file included from /workspace/x-heep/sw/device/lib/drivers/im2col_spc/im2col.h:22,
+                 from /workspace/x-heep/sw/device/lib/drivers/im2col_spc/im2col.c:12:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 36%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/pad_control/pad_control.c.obj
+[ 38%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/power_manager/power_manager.c.obj
+In file included from /workspace/x-heep/sw/device/lib/drivers/power_manager/power_manager.c:11:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 41%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/rv_plic/rv_plic.c.obj
+[ 44%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/rv_timer/rv_timer.c.obj
+[ 47%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/serial_link/serial_link.c.obj
+In file included from /workspace/x-heep/sw/device/lib/drivers/serial_link/serial_link.h:12,
+                 from /workspace/x-heep/sw/device/lib/drivers/serial_link/serial_link.c:3:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 50%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/serial_link/serial_link_xheep_wrapper_driver.c.obj
+[ 52%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/soc_ctrl/soc_ctrl.c.obj
+[ 55%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/spi_host/spi_host.c.obj
+[ 58%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/uart/uart.c.obj
+[ 61%] Building C object CMakeFiles/main.elf.dir/device/lib/drivers/w25q128jw_controller/w25q128jw_controller.c.obj
+[ 63%] Building C object CMakeFiles/main.elf.dir/device/lib/runtime/core_v_mini_mcu.c.obj
+[ 66%] Building C object CMakeFiles/main.elf.dir/device/lib/runtime/handler.c.obj
+[ 69%] Building C object CMakeFiles/main.elf.dir/device/lib/runtime/init.c.obj
+[ 72%] Building C object CMakeFiles/main.elf.dir/device/lib/runtime/syscalls.c.obj
+In file included from /workspace/x-heep/sw/device/lib/runtime/syscalls.c:37:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 75%] Building C object CMakeFiles/main.elf.dir/device/lib/sdk/dma/dma_sdk.c.obj
+[ 77%] Building C object CMakeFiles/main.elf.dir/device/lib/sdk/i2c/i2c_sdk.c.obj
+In file included from /workspace/x-heep/sw/device/lib/sdk/i2c/i2c_sdk.h:18,
+                 from /workspace/x-heep/sw/device/lib/sdk/i2c/i2c_sdk.c:10:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 80%] Building C object CMakeFiles/main.elf.dir/device/lib/sdk/spi/spi_sdk.c.obj
+[ 83%] Building C object CMakeFiles/main.elf.dir/device/lib/sdk/spi_slave/spi_slave_sdk.c.obj
+[ 86%] Building C object CMakeFiles/main.elf.dir/device/lib/sdk/timer/timer_sdk.c.obj
+In file included from /workspace/x-heep/sw/device/lib/sdk/timer/timer_sdk.h:21,
+                 from /workspace/x-heep/sw/device/lib/sdk/timer/timer_sdk.c:12:
+/workspace/x-heep/sw/device/target/sim/x-heep.h:8:9: note: '#pragma message: the x-heep.h for SIMULATION is used'
+    8 | #pragma message ( "the x-heep.h for SIMULATION is used" )
+      |         ^~~~~~~
+[ 88%] Building ASM object CMakeFiles/main.elf.dir/device/lib/drivers/power_manager/power_manager_cpu_restore.S.obj
+[ 91%] Building ASM object CMakeFiles/main.elf.dir/device/lib/drivers/power_manager/power_manager_cpu_store.S.obj
+[ 94%] Building CXX object CMakeFiles/main.elf.dir/device/lib/runtime/heap.cpp.obj
+[ 97%] Building CXX object CMakeFiles/main.elf.dir/device/lib/runtime/syscalls_cpp.cpp.obj
+[100%] Linking CXX executable main.elf
+Invoking: C Disassemble ( CMakeFiles/main.dir/main.c.obj)
+Invoking: Disassemble (/tools/riscv/bin/riscv32-unknown-elf-objdump)
+Invoking: Hexdump
+Invoking: SREC Hexdump
+Invoking: Binary dump
+Invoking: Linker script copy
+make[4]: Leaving directory '/workspace/x-heep/sw/build'
+[100%] Built target main.elf
+make[3]: Leaving directory '/workspace/x-heep/sw/build'
+make[2]: Leaving directory '/workspace/x-heep/sw/build'
+make[1]: Leaving directory '/workspace/x-heep/sw'
+Total space: 128.0 kB = Continuous: [32, 32] kB + Interleaved: [16, 16, 16, 16] kB
+Bank        Start      End   Sz(kB)  Usd(kB)  Req(kB)  Utilz(%)    Contents
+ram0:         0.0     32.0     32.0      9.5      9.5      29.7    Code (C), ROData (R)
+ram1:        32.0    128.0     96.0     21.3     21.3      22.2    Data (d)
+Code placement: execute from RAM.
+
+Cont 0 CCCCCCCCCR---------------------- 	 29.7%
+Cont 1 dddddddddddddddddddddd---------- 	 66.5%
+IntL 2 ---------------- 	  0.0%
+IntL 3 ---------------- 	  0.0%
+IntL 4 ---------------- 	  0.0%
+IntL 5 ---------------- 	  0.0%
+$You are executing from: /workspace/x-heep
+USING MINICONDA core-v-mini-mcu
+/opt/conda/envs/core-v-mini-mcu/bin/fusesoc --cores-root . run --no-export --target=sim --tool=verilator  --run openhwgroup.org:systems:core-v-mini-mcu  \
+	--run_options="+firmware=../../../sw/build/main.hex "
+WARNING: Unknown item cache_type in section Generators
+WARNING: Unknown item formal in section Target
+WARNING: Unknown item formal in section Target
+WARNING: Unknown item formal in section Target
+WARNING: Unknown item cache_type in section Generators
+INFO: Running
+INFO: Running pre_run script remove_uart_log
+INFO: Running simulation
+[TESTBENCH]: No OpenOCD is used
+[TESTBENCH]: loading firmware  ../../../sw/build/main.hex
+[TESTBENCH]: No Max time specified
+[TESTBENCH]: No Boot Option specified, using jtag (boot_sel=0)
+                   0: the parameter FPU_SS_ZFINX is 0
+                   0: the parameter QUADRILATERO is 0
+                   0: the parameter SIMPLE_XIF_COPROC is 0
+                   0: the parameter ASCON_COPROC is 0
+                   0: the parameter ASCON_ACCELERATOR is 1
+                   0: the parameter ASCON_ACCELERATOR_WDMA is 0
+                   0: the parameter JTAG_DPI is 0
+                   0: the parameter EXT_DOMAINS is 00000000
+                   0: the parameter USE_EXTERNAL_DEVICE_EXAMPLE is 1
+                   0: the parameter CLK_FREQUENCY is     100000 KHz
+[X-HEEP]: NUM_BYTES =        128KB
+
+UART: Created /dev/pts/1 for uart0. Connect to it with any terminal program, e.g.
+$ screen /dev/pts/1
+UART: Additionally writing all UART output to 'uart0.log'.
+Reset Released
+Set Exit Loop
+Memory Loaded
+Simulation finished after 209402 clock cycles
+Program Finished with value 0
+INFO: Running post_run script print_uart_log
+Ascon-CXOF128 accelerator cycles (Z=256, message=16, output=16384): 39637
+benchmark finished (output xor = 0x1ab1d188)

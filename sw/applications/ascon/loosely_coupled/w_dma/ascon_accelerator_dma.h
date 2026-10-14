@@ -173,7 +173,8 @@ static inline dma_config_flags_t ascon_dma_prepare_input(
 }
 
 static inline dma_config_flags_t ascon_dma_prepare_output(
-    ascon_dma_job_t *job, uint32_t *destination, uint32_t word_count)
+    ascon_dma_job_t *job, uint32_t *destination, uint32_t word_count,
+    dma_trans_end_evt_t end_event)
 {
     *job = (ascon_dma_job_t){0};
     if (word_count == 0U) return DMA_CONFIG_OK;
@@ -200,9 +201,10 @@ static inline dma_config_flags_t ascon_dma_prepare_output(
         .src_type = DMA_DATA_TYPE_WORD,
         .dst_type = DMA_DATA_TYPE_WORD,
         .mode = DMA_TRANS_MODE_SINGLE,
-        /* The output transaction is the completion event for one complete
-           Ascon stream. It wakes the CPU without STATUS-register polling. */
-        .end = DMA_TRANS_END_INTR,
+        /* Benchmarks use POLLING so mcycle includes the complete operation
+           without interrupt-service overhead. Applications may select INTR
+           and wait with ascon_dma_wait_operation() when WFI is desired. */
+        .end = end_event,
         .channel = ASCON_ACCEL_OUTPUT_DMA_CHANNEL,
     };
 
