@@ -84,6 +84,7 @@ module testharness #(
   localparam bit ASCON_COPROC = 1'b${th.get("ASCON_COPROC", 0)};
   localparam bit ASCON_ACCELERATOR = 1'b${th.get("ASCON_ACCELERATOR", 0)};
   localparam bit ASCON_ACCELERATOR_WDMA = 1'b${th.get("ASCON_ACCELERATOR_WDMA", 0)};
+  localparam bit ASCON_ACCELERATOR_WDMA_HWFIFO = 1'b${th.get("ASCON_ACCELERATOR_WDMA_HWFIFO", 0)};
 % else:
   localparam bit FPU_SS_ZFINX = 1'b0;
   localparam bit QUADRILATERO = 1'b0;
@@ -91,6 +92,7 @@ module testharness #(
   localparam bit ASCON_COPROC = 1'b0;
   localparam bit ASCON_ACCELERATOR = 1'b0;
   localparam bit ASCON_ACCELERATOR_WDMA = 1'b0;
+  localparam bit ASCON_ACCELERATOR_WDMA_HWFIFO = 1'b0;
 % endif
 
   // Internal signals
@@ -144,8 +146,10 @@ module testharness #(
   logic [core_v_mini_mcu_pkg::DMA_CH_NUM-1:0] ext_dma_slot_rx;
   logic ascon_dma_input_ready;
   logic ascon_dma_output_valid;
+  logic ascon_dma_hwfifo_done;
 
-  assign ext_dma_slot_tx[0] = (ASCON_ACCELERATOR && ASCON_ACCELERATOR_WDMA) ?
+  assign ext_dma_slot_tx[0] = (ASCON_ACCELERATOR && ASCON_ACCELERATOR_WDMA &&
+      !ASCON_ACCELERATOR_WDMA_HWFIFO) ?
       ascon_dma_input_ready : iffifo_in_ready;
   assign ext_dma_slot_rx[0] = iffifo_out_valid;
   if (core_v_mini_mcu_pkg::DMA_CH_NUM == 2) begin : gen_two_dma_channels
@@ -154,7 +158,8 @@ module testharness #(
   end else if (core_v_mini_mcu_pkg::DMA_CH_NUM > 2) begin : gen_many_dma_channels
     assign ext_dma_slot_tx[core_v_mini_mcu_pkg::DMA_CH_NUM-1:1] = '0;
     assign ext_dma_slot_rx[1] = 1'b0;
-    assign ext_dma_slot_rx[2] = (ASCON_ACCELERATOR && ASCON_ACCELERATOR_WDMA) ?
+    assign ext_dma_slot_rx[2] = (ASCON_ACCELERATOR && ASCON_ACCELERATOR_WDMA &&
+        !ASCON_ACCELERATOR_WDMA_HWFIFO) ?
         ascon_dma_output_valid : 1'b0;
     if (core_v_mini_mcu_pkg::DMA_CH_NUM > 3) begin : gen_unused_dma_rx_channels
       assign ext_dma_slot_rx[core_v_mini_mcu_pkg::DMA_CH_NUM-1:3] = '0;
@@ -186,6 +191,18 @@ module testharness #(
 
   fifo_req_t [core_v_mini_mcu_pkg::DMA_CH_NUM-1:0] hw_fifo_req;
   fifo_rsp_t [core_v_mini_mcu_pkg::DMA_CH_NUM-1:0] hw_fifo_resp;
+  logic [core_v_mini_mcu_pkg::DMA_CH_NUM-1:0] hw_fifo_done;
+
+  assign hw_fifo_done[0] = dlc_done;
+  if (core_v_mini_mcu_pkg::DMA_CH_NUM > 1) begin : gen_hw_fifo_done_channel_1
+    assign hw_fifo_done[1] = 1'b0;
+  end
+  if (core_v_mini_mcu_pkg::DMA_CH_NUM > 2) begin : gen_hw_fifo_done_channel_2
+    assign hw_fifo_done[2] = ascon_dma_hwfifo_done;
+  end
+  if (core_v_mini_mcu_pkg::DMA_CH_NUM > 3) begin : gen_unused_hw_fifo_done_channels
+    assign hw_fifo_done[core_v_mini_mcu_pkg::DMA_CH_NUM-1:3] = '0;
+  end
 
   wire [serial_link_single_channel_reg_pkg::NumChannels-1:0] ddr_clk_o_xheep;
   wire [serial_link_single_channel_reg_pkg::NumChannels-1:0] ddr_clk_i_xheep;
@@ -265,6 +282,8 @@ module testharness #(
     $display("%t: the parameter ASCON_ACCELERATOR is %x", $time, ASCON_ACCELERATOR);
     $display("%t: the parameter ASCON_ACCELERATOR_WDMA is %x", $time,
              ASCON_ACCELERATOR_WDMA);
+    $display("%t: the parameter ASCON_ACCELERATOR_WDMA_HWFIFO is %x", $time,
+             ASCON_ACCELERATOR_WDMA_HWFIFO);
     $display("%t: the parameter JTAG_DPI is %x", $time, JTAG_DPI);
     $display("%t: the parameter EXT_DOMAINS is %x", $time, core_v_mini_mcu_pkg::EXTERNAL_DOMAINS);
     $display("%t: the parameter USE_EXTERNAL_DEVICE_EXAMPLE is %x", $time,
@@ -408,7 +427,7 @@ module testharness #(
       .ext_dma_slot_rx_i(ext_dma_slot_rx),
       .ext_dma_stop_i('0),
       .intr_ext_peripheral_i(gpio[31]),
-      .hw_fifo_done_i({{(core_v_mini_mcu_pkg::DMA_CH_NUM - 1) {1'b0}}, dlc_done}),
+      .hw_fifo_done_i(hw_fifo_done),
       .dma_done_o(dma_busy)
       % if user_peripheral_domain.contains_peripheral('serial_link_reg'):
         ,
@@ -642,7 +661,25 @@ module testharness #(
       end
 
       if (ASCON_ACCELERATOR != 0) begin : gen_ascon_accelerator
-        if (ASCON_ACCELERATOR_WDMA != 0) begin : gen_wdma
+        if (ASCON_ACCELERATOR_WDMA_HWFIFO != 0) begin : gen_wdma_hwfifo
+          ascon_wrapper_wdma_hwfifo #(
+              .reg_req_t (reg_req_t),
+              .reg_rsp_t (reg_rsp_t),
+              .fifo_req_t(fifo_req_t),
+              .fifo_rsp_t(fifo_rsp_t)
+          ) ascon_accelerator_i (
+              .clk_i(simple_acc_clk),
+              .rst_ni(simple_acc_rst_n),
+              .reg_req_i(ext_periph_slv_req[testharness_pkg::ASCON_ACCELERATOR_IDX]),
+              .reg_rsp_o(ext_periph_slv_rsp[testharness_pkg::ASCON_ACCELERATOR_IDX]),
+              .hw_fifo_req_i(hw_fifo_req[2]),
+              .hw_fifo_resp_o(hw_fifo_resp[2]),
+              .hw_fifo_done_o(ascon_dma_hwfifo_done)
+          );
+
+          assign ascon_dma_input_ready = 1'b0;
+          assign ascon_dma_output_valid = 1'b0;
+        end else if (ASCON_ACCELERATOR_WDMA != 0) begin : gen_wdma
           ascon_wrapper_wdma #(
               .reg_req_t(reg_req_t),
               .reg_rsp_t(reg_rsp_t)
@@ -654,6 +691,8 @@ module testharness #(
               .dma_input_ready_o(ascon_dma_input_ready),
               .dma_output_valid_o(ascon_dma_output_valid)
           );
+
+          assign ascon_dma_hwfifo_done = 1'b0;
         end else begin : gen_wodma
           ascon_wrapper_wodma #(
               .reg_req_t(reg_req_t),
@@ -667,6 +706,7 @@ module testharness #(
 
           assign ascon_dma_input_ready = 1'b0;
           assign ascon_dma_output_valid = 1'b0;
+          assign ascon_dma_hwfifo_done = 1'b0;
         end
 
         // The CPU-fed implementation has no OBI master ports. Keep the two
@@ -676,6 +716,7 @@ module testharness #(
       end else begin : gen_simple_accelerator
         assign ascon_dma_input_ready = 1'b0;
         assign ascon_dma_output_valid = 1'b0;
+        assign ascon_dma_hwfifo_done = 1'b0;
 
         simple_accelerator #(
             .reg_req_t(reg_req_t),

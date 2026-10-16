@@ -5,7 +5,7 @@
 #include "../ascon_accelerator_dma.h"
 
 #ifndef MESSAGE_LENGTH
-#define MESSAGE_LENGTH 1536U
+#define MESSAGE_LENGTH 16384U
 #endif
 
 #define HASH_BYTES 32U

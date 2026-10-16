@@ -171,12 +171,12 @@ UART: Additionally writing all UART output to 'uart0.log'.
 Reset Released
 Set Exit Loop
 Memory Loaded
-Simulation finished after 206302 clock cycles
+Simulation finished after 203302 clock cycles
 Program Finished with value 0
 INFO: Running post_run script print_uart_log
 Ascon DMA reusable channel cold init cycles: 2105
-Ascon AEAD128 DMA warm encryption cycles (AD=1536, PT=1536): 5633
-  hardware=5378 input_wait=2048 output_wait=1164 xor=0xd2ff25f7
-Ascon AEAD128 DMA warm decryption cycles (AD=1536, CT=1536): 5609
-  hardware=5382 input_wait=2060 output_wait=1152
+Ascon AEAD128 DMA warm encryption cycles (AD=1536, PT=1536): 4464
+  hardware=4182 input_wait=1732 output_wait=284 xor=0xd2ff25f7
+Ascon AEAD128 DMA warm decryption cycles (AD=1536, CT=1536): 4435
+  hardware=4188 input_wait=1732 output_wait=286
 DMA encryption/decryption test passed!

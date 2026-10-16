@@ -1,18 +1,18 @@
 /*
- * Ascon loosely-coupled accelerator wrapper (DMA-fed, no-FIFO implementation)
+ * Ascon loosely-coupled accelerator wrapper (DMA-fed, 4-word stream FIFOs)
  *
  * The CPU configures the operation and programs two X-HEEP DMA channels.
  * The input channel repeatedly writes INPUT_DATA and the output channel
  * repeatedly reads OUTPUT_DATA. Both peripheral addresses remain fixed while
- * the SRAM address advances. INPUT_DATA writes and OUTPUT_DATA reads are
- * blocking register-bus transactions: reg_rsp_o.ready remains low until the
- * corresponding Ascon stream handshake can complete.
+ * the SRAM address advances. INPUT_DATA writes enqueue a four-word input FIFO
+ * and OUTPUT_DATA reads dequeue a four-word output FIFO. A register-bus
+ * transaction blocks only while its corresponding FIFO cannot make progress.
  *
  * The wrapper derives data_keep/data_last from the configured byte lengths.
  * When a phase requires an empty terminator, the wrapper injects
  * {data=0, keep=0, last=1} internally; software must not write that word.
  * dma_input_ready_o and dma_output_valid_o drive the DMA external TX/RX
- * trigger slots. There are no accelerator-side FIFOs and no OBI master ports.
+ * trigger slots. The accelerator has no OBI master ports.
  *
  * Register map (byte offsets):
  *   0x00 MODE         RW [1:0]
@@ -22,19 +22,19 @@
  *   0x10 DATA_LEN     RW [31:0]    PT/CT/message bytes
  *   0x14 CUSTOM_LEN   RW [31:0]    CXOF customization bytes
  *   0x18 CONTROL      W  [0] START, [1] CLEAR_STATUS
- *   0x1c INPUT_DATA   W  [31:0]    blocking input-word push
- *   0x20 OUTPUT_DATA  R  [31:0]    blocking output-word pop
+ *   0x1c INPUT_DATA   W  [31:0]    input-FIFO push
+ *   0x20 OUTPUT_DATA  R  [31:0]    output-FIFO pop
  *   0x24 STATUS       R             see status layout below
  *   0x28 CYCLE_COUNT  R  [31:0]    active accelerator cycles
- *   0x2c INPUT_WAIT   R  [31:0]    cycles stalled for an input DMA word
- *   0x30 OUTPUT_WAIT  R  [31:0]    cycles stalled for an output DMA read
+ *   0x2c INPUT_WAIT   R  [31:0]    cycles stalled by an empty input FIFO
+ *   0x30 OUTPUT_WAIT  R  [31:0]    cycles stalled by a full output FIFO
  *
  * STATUS layout:
  *   [0] DONE (sticky until START or CLEAR_STATUS)
  *   [1] ERROR (sticky until START or CLEAR_STATUS)
  *   [2] BUSY
- *   [3] DMA input word can currently be presented to the core
- *   [4] OUTPUT_VALID
+ *   [3] input FIFO can accept a DMA word for the current phase
+ *   [4] output FIFO is not empty
  *   [7:5] current input phase
  *   [8] Ascon reset synchronization complete
  *
@@ -80,6 +80,13 @@ module ascon_wrapper_wdma #(
   localparam logic [1:0] MODE_XOF128 = 2'b10;
   localparam logic [1:0] MODE_CXOF128 = 2'b11;
 
+  localparam int unsigned INPUT_FIFO_DEPTH = 4;
+  localparam int unsigned INPUT_FIFO_PTR_WIDTH = $clog2(INPUT_FIFO_DEPTH);
+  localparam int unsigned INPUT_FIFO_COUNT_WIDTH = $clog2(INPUT_FIFO_DEPTH + 1);
+  localparam int unsigned OUTPUT_FIFO_DEPTH = 4;
+  localparam int unsigned OUTPUT_FIFO_PTR_WIDTH = $clog2(OUTPUT_FIFO_DEPTH);
+  localparam int unsigned OUTPUT_FIFO_COUNT_WIDTH = $clog2(OUTPUT_FIFO_DEPTH + 1);
+
   typedef enum logic [2:0] {
     PHASE_IDLE,
     PHASE_KEY,
@@ -121,57 +128,85 @@ module ascon_wrapper_wdma #(
   // Configuration and operation state
   // -------------------------------------------------------------------------
 
-  logic             [ 1:0] cfg_mode_q;
-  logic                    cfg_ed_q;
-  logic             [31:0] cfg_hash_len_q;
-  logic             [31:0] cfg_ad_len_q;
-  logic             [31:0] cfg_data_len_q;
-  logic             [31:0] cfg_custom_len_q;
+  logic             [                        1:0] cfg_mode_q;
+  logic                                           cfg_ed_q;
+  logic             [                       31:0] cfg_hash_len_q;
+  logic             [                       31:0] cfg_ad_len_q;
+  logic             [                       31:0] cfg_data_len_q;
+  logic             [                       31:0] cfg_custom_len_q;
 
-  logic             [ 1:0] active_mode_q;
-  logic                    active_ed_q;
-  logic             [31:0] active_hash_len_q;
-  logic             [31:0] active_ad_len_q;
-  logic             [31:0] active_data_len_q;
-  logic             [31:0] active_custom_len_q;
+  logic             [                        1:0] active_mode_q;
+  logic                                           active_ed_q;
+  logic             [                       31:0] active_hash_len_q;
+  logic             [                       31:0] active_ad_len_q;
+  logic             [                       31:0] active_data_len_q;
+  logic             [                       31:0] active_custom_len_q;
 
-  operation_state_t        operation_state_q;
-  logic                    busy_q;
-  logic                    done_q;
-  logic                    error_q;
-  logic             [31:0] cycle_count_q;
-  logic             [31:0] input_wait_count_q;
-  logic             [31:0] output_wait_count_q;
+  operation_state_t                               operation_state_q;
+  logic                                           busy_q;
+  logic                                           done_q;
+  logic                                           error_q;
+  logic             [                       31:0] cycle_count_q;
+  logic             [                       31:0] input_wait_count_q;
+  logic             [                       31:0] output_wait_count_q;
 
-  logic                    configuration_valid;
-  logic                    start_request;
-  logic                    clear_status_request;
-  logic                    start_accept;
-  logic                    start_reject;
+  logic                                           configuration_valid;
+  logic                                           start_request;
+  logic                                           clear_status_request;
+  logic                                           start_accept;
+  logic                                           start_reject;
 
   // Ascon stream interface signals are declared before the phase controller
   // because configuration/start logic also observes reset completion.
-  logic                    ascon_reset_complete;
-  logic                    ascon_start;
-  logic                    ascon_core_done;
-  logic                    ascon_core_error;
-  logic                    ascon_key_en;
-  logic                    ascon_nonce_en;
-  logic                    ascon_assoc_en;
-  logic                    ascon_text_en;
-  logic                    ascon_custom_en;
-  logic                    ascon_input_request;
-  logic                    ascon_input_valid;
-  logic             [31:0] ascon_data_in;
-  logic             [ 3:0] ascon_data_keep;
-  logic                    ascon_data_last;
-  logic                    ascon_output_valid;
-  logic                    ascon_output_ready;
-  logic             [31:0] ascon_data_out;
-  logic             [ 3:0] ascon_output_keep;
-  logic                    ascon_output_last;
-  logic                    core_advance;
-  logic                    input_fire;
+  logic                                           ascon_reset_complete;
+  logic                                           ascon_start;
+  logic                                           ascon_core_done;
+  logic                                           ascon_core_error;
+  logic                                           ascon_key_en;
+  logic                                           ascon_nonce_en;
+  logic                                           ascon_assoc_en;
+  logic                                           ascon_text_en;
+  logic                                           ascon_custom_en;
+  logic                                           ascon_input_request;
+  logic                                           ascon_input_valid;
+  logic             [                       31:0] ascon_data_in;
+  logic             [                        3:0] ascon_data_keep;
+  logic                                           ascon_data_last;
+  logic                                           ascon_output_valid;
+  logic                                           ascon_output_ready;
+  logic             [                       31:0] ascon_data_out;
+  logic             [                        3:0] ascon_output_keep;
+  logic                                           ascon_output_last;
+  logic                                           core_advance;
+  logic                                           input_fire;
+  logic                                           output_fire;
+
+  logic             [                       31:0] input_fifo_data_q       [ INPUT_FIFO_DEPTH];
+  logic             [                        3:0] input_fifo_keep_q       [ INPUT_FIFO_DEPTH];
+  logic                                           input_fifo_last_q       [ INPUT_FIFO_DEPTH];
+  logic             [   INPUT_FIFO_PTR_WIDTH-1:0] input_fifo_read_ptr_q;
+  logic             [   INPUT_FIFO_PTR_WIDTH-1:0] input_fifo_write_ptr_q;
+  logic             [ INPUT_FIFO_COUNT_WIDTH-1:0] input_fifo_count_q;
+  logic                                           input_fifo_empty;
+  logic                                           input_fifo_full;
+  logic                                           input_fifo_can_push;
+  logic                                           input_fifo_push;
+  logic                                           input_fifo_pop;
+  logic             [                       31:0] input_fifo_data_head;
+  logic             [                        3:0] input_fifo_keep_head;
+  logic                                           input_fifo_last_head;
+
+  logic             [                       31:0] output_fifo_data_q      [OUTPUT_FIFO_DEPTH];
+  logic             [  OUTPUT_FIFO_PTR_WIDTH-1:0] output_fifo_read_ptr_q;
+  logic             [  OUTPUT_FIFO_PTR_WIDTH-1:0] output_fifo_write_ptr_q;
+  logic             [OUTPUT_FIFO_COUNT_WIDTH-1:0] output_fifo_count_q;
+  logic                                           output_fifo_empty;
+  logic                                           output_fifo_full;
+  logic                                           output_fifo_can_push;
+  logic                                           output_fifo_push;
+  logic                                           output_fifo_pop;
+  logic             [                       31:0] output_fifo_data_head;
+  logic                                           stream_output_access;
 
   assign configuration_valid =
       ((cfg_mode_q == MODE_AEAD128) ||
@@ -186,7 +221,10 @@ module ascon_wrapper_wdma #(
   assign clear_status_request = reg_req_i.valid && reg_req_i.write &&
                                 (reg_req_i.addr[7:0] == CONTROL_OFFSET) &&
                                 reg_req_i.wstrb[0] && reg_req_i.wdata[1];
-  assign start_accept = start_request && !busy_q && ascon_reset_complete && configuration_valid;
+  // Do not allow a new operation to discard output that its DMA channel has
+  // not drained yet.
+  assign start_accept = start_request && !busy_q && output_fifo_empty &&
+                        ascon_reset_complete && configuration_valid;
   assign start_reject = start_request && !start_accept;
 
   // -------------------------------------------------------------------------
@@ -205,7 +243,6 @@ module ascon_wrapper_wdma #(
   logic          input_phase_request;
   logic          stream_input_access;
   logic          stream_input_access_legal;
-  logic          stream_input_can_be_presented;
   logic          input_word_ready;
   logic          inject_empty_terminator;
 
@@ -288,7 +325,8 @@ module ascon_wrapper_wdma #(
                                ascon_assoc_en | ascon_text_en |
                                ascon_custom_en;
 
-  assign inject_empty_terminator = busy_q && empty_terminator_pending_q &&
+  assign inject_empty_terminator = busy_q && input_fifo_empty &&
+                                   empty_terminator_pending_q &&
                                    (input_bytes_remaining_q == 0) &&
                                    input_phase_request;
 
@@ -297,38 +335,51 @@ module ascon_wrapper_wdma #(
   assign stream_input_access_legal = stream_input_access &&
                                      (reg_req_i.wstrb == 4'b1111) &&
                                      busy_q && (phase_q != PHASE_WAIT);
+
+  // The DMA may fill the FIFO while the core is permuting and has temporarily
+  // deasserted its input request. input_bytes_remaining_q counts bytes that
+  // have not yet been enqueued, rather than bytes not yet consumed by Ascon.
   assign input_word_ready = busy_q && (phase_q != PHASE_IDLE) &&
                             (phase_q != PHASE_WAIT) &&
                             (input_bytes_remaining_q != 0) &&
-                            input_phase_request;
-  assign stream_input_can_be_presented = stream_input_access_legal && input_word_ready;
+                            input_fifo_can_push;
+  assign input_fifo_push = stream_input_access_legal && input_word_ready;
 
-  // An internally generated terminator has priority over a DMA word. The
-  // register bus remains stalled until the terminator is consumed and the
-  // next phase is ready, so the pending DMA word cannot be misclassified.
-  assign ascon_input_valid = inject_empty_terminator || stream_input_can_be_presented;
-  assign ascon_data_in = inject_empty_terminator ? 32'd0 : reg_req_i.wdata;
-  assign ascon_data_keep = inject_empty_terminator ? 4'b0000 : keep_from_remaining(
-      input_bytes_remaining_q
-  );
-  assign ascon_data_last = inject_empty_terminator ? 1'b1 :
-                           ((input_bytes_remaining_q <= 32'd4) &&
-                            !empty_terminator_pending_q);
+  assign ascon_input_valid = inject_empty_terminator || (!input_fifo_empty && input_phase_request);
+  assign ascon_data_in = inject_empty_terminator ? 32'd0 : input_fifo_data_head;
+  assign ascon_data_keep = inject_empty_terminator ? 4'b0000 : input_fifo_keep_head;
+  assign ascon_data_last = inject_empty_terminator ? 1'b1 : input_fifo_last_head;
 
-  assign ascon_output_ready = reg_req_i.valid && !reg_req_i.write &&
-                              (reg_req_i.addr[7:0] == OUTPUT_DATA_OFFSET);
+  assign stream_output_access = reg_req_i.valid && !reg_req_i.write &&
+                                (reg_req_i.addr[7:0] == OUTPUT_DATA_OFFSET);
+  assign output_fifo_pop = stream_output_access && !output_fifo_empty;
+  assign output_fifo_can_push = !output_fifo_full || output_fifo_pop;
+  assign ascon_output_ready = output_fifo_can_push;
 
   assign core_advance = (~ascon_input_request | ascon_input_valid) &&
                         (~ascon_output_valid | ascon_output_ready);
   assign input_fire = core_advance && ascon_input_request && ascon_input_valid;
+  assign output_fire = core_advance && ascon_output_valid && ascon_output_ready;
+  assign input_fifo_pop = input_fire && !inject_empty_terminator;
+  assign output_fifo_push = output_fire;
   assign phase_complete = input_fire && ascon_data_last;
 
+  // A simultaneous FIFO pop may free a full slot in the same cycle.
+  assign input_fifo_empty = (input_fifo_count_q == 0);
+  assign input_fifo_full = (input_fifo_count_q == INPUT_FIFO_COUNT_WIDTH'(INPUT_FIFO_DEPTH));
+  assign input_fifo_can_push = !input_fifo_full || input_fifo_pop;
+  assign input_fifo_data_head = input_fifo_data_q[input_fifo_read_ptr_q];
+  assign input_fifo_keep_head = input_fifo_keep_q[input_fifo_read_ptr_q];
+  assign input_fifo_last_head = input_fifo_last_q[input_fifo_read_ptr_q];
+
+  assign output_fifo_empty = (output_fifo_count_q == 0);
+  assign output_fifo_full = (output_fifo_count_q == OUTPUT_FIFO_COUNT_WIDTH'(OUTPUT_FIFO_DEPTH));
+  assign output_fifo_data_head = output_fifo_data_q[output_fifo_read_ptr_q];
+
   // The trigger levels advertise that the corresponding fixed-address DMA
-  // access can make progress. The register handshake is still the transfer.
-  // Do not let an input request occupy the single register-slave port while
-  // an output word is waiting; the output DMA must be able to drain it first.
-  assign dma_input_ready_o = input_word_ready && !inject_empty_terminator && !ascon_output_valid;
-  assign dma_output_valid_o = ascon_output_valid;
+  // access can enqueue/dequeue a FIFO word.
+  assign dma_input_ready_o = input_word_ready;
+  assign dma_output_valid_o = !output_fifo_empty;
 
   // -------------------------------------------------------------------------
   // Register slave
@@ -375,8 +426,7 @@ module ascon_wrapper_wdma #(
         CONTROL_OFFSET: begin
           if (!reg_req_i.write) begin
             reg_rsp_o.error = 1'b1;
-          end else if (reg_req_i.wstrb[0] && reg_req_i.wdata[0] &&
-                       (busy_q || !ascon_reset_complete || !configuration_valid)) begin
+          end else if (reg_req_i.wstrb[0] && reg_req_i.wdata[0] && !start_accept) begin
             reg_rsp_o.error = 1'b1;
           end
         end
@@ -386,17 +436,15 @@ module ascon_wrapper_wdma #(
               (phase_q == PHASE_WAIT)) begin
             reg_rsp_o.error = 1'b1;
           end else begin
-            // Complete only when this DMA-provided word is accepted. An
-            // internally injected terminator never completes the DMA access.
-            reg_rsp_o.ready = input_fire && !inject_empty_terminator;
+            reg_rsp_o.ready = input_fifo_push;
           end
         end
 
         OUTPUT_DATA_OFFSET: begin
           if (reg_req_i.write) begin
             reg_rsp_o.error = 1'b1;
-          end else if (ascon_output_valid) begin
-            reg_rsp_o.rdata = ascon_data_out;
+          end else if (!output_fifo_empty) begin
+            reg_rsp_o.rdata = output_fifo_data_head;
           end else if (busy_q) begin
             reg_rsp_o.ready = 1'b0;
           end else begin
@@ -412,7 +460,7 @@ module ascon_wrapper_wdma #(
               23'd0,
               ascon_reset_complete,
               phase_q,
-              ascon_output_valid,
+              !output_fifo_empty,
               input_word_ready,
               busy_q,
               error_q,
@@ -570,18 +618,83 @@ module ascon_wrapper_wdma #(
       phase_q                    <= phase_load_value;
       input_bytes_remaining_q    <= phase_byte_length;
       empty_terminator_pending_q <= phase_needs_empty_terminator;
-    end else if (input_fire) begin
-      if (inject_empty_terminator) begin
-        empty_terminator_pending_q <= 1'b0;
-      end else if (input_bytes_remaining_q > 32'd4) begin
-        input_bytes_remaining_q <= input_bytes_remaining_q - 32'd4;
-      end else begin
-        input_bytes_remaining_q <= 32'd0;
+    end else begin
+      if (input_fifo_push) begin
+        if (input_bytes_remaining_q > 32'd4) begin
+          input_bytes_remaining_q <= input_bytes_remaining_q - 32'd4;
+        end else begin
+          input_bytes_remaining_q <= 32'd0;
+        end
       end
-    end else if (operation_state_q == OP_IDLE) begin
-      phase_q                    <= PHASE_IDLE;
-      input_bytes_remaining_q    <= 32'd0;
-      empty_terminator_pending_q <= 1'b0;
+
+      if (input_fire && inject_empty_terminator) empty_terminator_pending_q <= 1'b0;
+
+      if (operation_state_q == OP_IDLE) begin
+        phase_q                    <= PHASE_IDLE;
+        input_bytes_remaining_q    <= 32'd0;
+        empty_terminator_pending_q <= 1'b0;
+      end
+    end
+  end
+
+  // -------------------------------------------------------------------------
+  // Four-word input/output FIFOs
+  // -------------------------------------------------------------------------
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : input_fifo_registers
+    if (!rst_ni) begin
+      input_fifo_read_ptr_q  <= '0;
+      input_fifo_write_ptr_q <= '0;
+      input_fifo_count_q     <= '0;
+    end else if (start_accept) begin
+      input_fifo_read_ptr_q  <= '0;
+      input_fifo_write_ptr_q <= '0;
+      input_fifo_count_q     <= '0;
+    end else begin
+      if (input_fifo_push) begin
+        input_fifo_data_q[input_fifo_write_ptr_q] <= reg_req_i.wdata;
+        input_fifo_keep_q[input_fifo_write_ptr_q] <= keep_from_remaining(input_bytes_remaining_q);
+        input_fifo_last_q[input_fifo_write_ptr_q] <=
+            (input_bytes_remaining_q <= 32'd4) && !empty_terminator_pending_q;
+        input_fifo_write_ptr_q <= input_fifo_write_ptr_q + 1'b1;
+      end
+
+      if (input_fifo_pop) input_fifo_read_ptr_q <= input_fifo_read_ptr_q + 1'b1;
+
+      case ({
+        input_fifo_push, input_fifo_pop
+      })
+        2'b10:   input_fifo_count_q <= input_fifo_count_q + 1'b1;
+        2'b01:   input_fifo_count_q <= input_fifo_count_q - 1'b1;
+        default: ;
+      endcase
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : output_fifo_registers
+    if (!rst_ni) begin
+      output_fifo_read_ptr_q  <= '0;
+      output_fifo_write_ptr_q <= '0;
+      output_fifo_count_q     <= '0;
+    end else if (start_accept) begin
+      output_fifo_read_ptr_q  <= '0;
+      output_fifo_write_ptr_q <= '0;
+      output_fifo_count_q     <= '0;
+    end else begin
+      if (output_fifo_push) begin
+        output_fifo_data_q[output_fifo_write_ptr_q] <= ascon_data_out;
+        output_fifo_write_ptr_q <= output_fifo_write_ptr_q + 1'b1;
+      end
+
+      if (output_fifo_pop) output_fifo_read_ptr_q <= output_fifo_read_ptr_q + 1'b1;
+
+      case ({
+        output_fifo_push, output_fifo_pop
+      })
+        2'b10:   output_fifo_count_q <= output_fifo_count_q + 1'b1;
+        2'b01:   output_fifo_count_q <= output_fifo_count_q - 1'b1;
+        default: ;
+      endcase
     end
   end
 
@@ -616,7 +729,7 @@ module ascon_wrapper_wdma #(
   );
 
   // The CPU already knows the requested output length. These sidebands do not
-  // need storage or software-visible registers in this no-FIFO interface.
+  // need storage in the data-only output FIFO or software-visible registers.
   logic unused_stream_sidebands;
   assign unused_stream_sidebands = ^{ascon_output_keep, ascon_output_last};
 

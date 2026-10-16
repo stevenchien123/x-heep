@@ -171,9 +171,9 @@ UART: Additionally writing all UART output to 'uart0.log'.
 Reset Released
 Set Exit Loop
 Memory Loaded
-Simulation finished after 81202 clock cycles
+Simulation finished after 79802 clock cycles
 Program Finished with value 0
 INFO: Running post_run script print_uart_log
 Ascon DMA reusable channel cold init cycles: 1804
-Ascon CXOF128 DMA warm cycles (Z=16, message=16, output=1536): 3439
-  hardware=3221 input_wait=21 output_wait=812 xor=0xac4b87bf
+Ascon CXOF128 DMA warm cycles (Z=16, message=16, output=1536): 2614
+  hardware=2399 input_wait=10 output_wait=0 xor=0xac4b87bf
